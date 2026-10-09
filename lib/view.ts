@@ -2,11 +2,23 @@ import type { Track } from "@/components/player-context";
 import type { Beat, License, Order, Video } from "./types";
 import { moneyLabel } from "./money";
 
-/** URL for a stored file (served by /api/file/[...path]). */
+/**
+ * URL for a stored file (served by /api/file/[...path]).
+ *
+ * Paths are stored relative to the project root (e.g.
+ * `storage/uploads/public/beats/slug/preview.wav`) while the route resolves
+ * against the *public* upload root, so everything up to and including
+ * `/public/` must be stripped. Private masters/stems never match and stay
+ * unreachable through this route.
+ */
 export function fileUrl(p?: string | null): string | null {
   if (!p) return null;
-  const rel = String(p).replace(/^storage\//, "").replace(/^\/+/, "");
-  return `/api/file/${rel}`;
+  const rel = String(p)
+    .replace(/\\/g, "/")
+    .replace(/^.*\/public\//, "")
+    .replace(/^\/+/, "");
+  if (!rel || rel === String(p)) return null;
+  return `/api/file/${rel.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 export function artworkUrl(beat: { artwork?: string | null }, fallbackTitle = "Beat"): string {
