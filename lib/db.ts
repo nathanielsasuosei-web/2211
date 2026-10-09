@@ -267,12 +267,14 @@ function createSqliteDriver(file: string): Database {
     dialect: "sqlite",
     async all<T = Row>(sql: string, params: Param[] = []) {
       const bound = toSqlite(sql, params);
-      return prepare(bound.sql).all(...bound.params) as T[];
+      // node:sqlite returns null-prototype rows; Next.js refuses to pass those
+      // (or anything built from them) from a Server to a Client Component.
+      return (prepare(bound.sql).all(...bound.params) as Row[]).map((row) => ({ ...row })) as T[];
     },
     async get<T = Row>(sql: string, params: Param[] = []) {
       const bound = toSqlite(sql, params);
-      const row = prepare(bound.sql).get(...bound.params) as T | undefined;
-      return row ?? null;
+      const row = prepare(bound.sql).get(...bound.params) as Row | undefined;
+      return row ? ({ ...row } as T) : null;
     },
     async run(sql: string, params: Param[] = []) {
       const bound = toSqlite(sql, params);

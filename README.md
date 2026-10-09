@@ -48,11 +48,48 @@ node scripts/mint-session.mjs admin@2211beats.com   # dev helper: print a sessio
 
 ## What is implemented
 
+### Putting your own beats in (replacing the demo catalogue)
+
+Two ways in — pick whichever suits how many beats you have.
+
+**One at a time** — `Admin → Beats & uploads`: drag-drop the tagged preview, untagged master,
+stems ZIP and artwork, set metadata and licence tiers, publish.
+
+**In bulk** — `Admin → Bulk import`: drop files into `storage/import/` (or the folder named by
+`IMPORT_DIR`) in any of these layouts, reload the page, tick what you want, click import.
+
+```
+storage/import/
+  midnight-log-drum/          ← one folder per beat
+    preview.wav               ← tagged player preview  → public tree
+    master.wav                ← untagged buyer file    → private tree
+    stems.zip                 ← trackout               → private tree
+    artwork.jpg               ← cover                  → public tree
+    beat.json                 ← { title, genre, mood, bpm, key, tags[], description,
+                                  price, currency, licences, published, featured, is_free }
+
+  Afrobeats - Accra Rain (100 BPM) (F# min) - master.wav    ← flat files, grouped by name
+  Afrobeats - Accra Rain (100 BPM) (F# min) - preview.wav      role words: preview/tagged,
+  Afrobeats - Accra Rain (100 BPM) (F# min) - artwork.jpg      master/untagged, stems/trackout
+
+  manifest.json               ← optional explicit list: [{ title, genre, bpm, price,
+                                 files: { preview, master, trackout, artwork } }, …]
+```
+
+The importer infers genre, title, BPM and key from file names when there is no JSON, probes the real
+duration from WAV/MP3 headers, keeps previews and artwork public while masters and stems stay in the
+private tree (reachable only through a delivery token), builds the four licence tiers from your
+`licences` string or base price, and can delete the source files after copying. Videos dropped in the
+same folder are published to `/watch`.
+
+For a clean shop: `Admin → Settings → Reset demo data` (or `npm run db:reset`), then import.
+
 ### Producer console (`/admin`)
 - **Beats** — drag-and-drop upload of preview (tagged), master (untagged), trackout/stems ZIP and
   cover art; genre, mood, key, BPM, tags, description, base price; licence tiers auto-generated from
   the base price or entered as a custom string (`MP3 Lease:120|WAV Lease:220|Trackout:380|Exclusive:1200`);
   publish / feature / make-free toggles; inline editor that can replace any file; delete.
+- **Bulk import** — publish a whole folder of beats/videos at once (see below).
 - **Videos** — upload an MP4/WebM, paste a YouTube/Vimeo link, or publish a **canvas visualizer**
   bound to one of your beats (used by the seeded demo so `/watch` works offline).
 - **Orders** — filter by status or search a reference; approve a bank transfer (delivers files +
@@ -123,7 +160,8 @@ file.
 | `APP_SECRET` | JWT signing secret — **change in production** | dev value |
 | `DATABASE_URL` | `postgres://…` for PostgreSQL; empty → SQLite at `storage/app.db` | empty |
 | `CURRENCY` | Store currency (ISO 4217) | `GHS` |
-| `UPLOAD_DIR`, `MAX_UPLOAD_MB` | Where files are stored, size cap | `storage/uploads`, `200` |
+| `UPLOAD_DIR`, `MAX_UPLOAD_MB` | Where files are stored, size cap | `storage/uploads`, `400` |
+| `IMPORT_DIR` | Folder scanned by `Admin → Bulk import` | `storage/import` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` / `ADMIN_PHONE` | Producer account created on first boot | see above |
 | `SUPPORT_EMAIL` | Reply-to address on every email | `hello@2211beats.com` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `MAIL_FROM` | Real email delivery | unset → local outbox |
@@ -167,6 +205,7 @@ lib/
   payments/              mpesa.ts, paystack.ts, options.ts (method availability per order)
   media/                 wav.mjs, zip.mjs, beat.mjs (synthesised demo audio), art.mjs (SVG art)
   actions/               server actions: auth, checkout, admin
+  importer.ts            bulk import: folder scan, filename metadata, WAV/MP3 duration probe
   seed.ts                demo catalogue + asset generation
   bootstrap.ts           idempotent schema + seed on boot
 instrumentation.ts       runs bootstrap once when the server starts

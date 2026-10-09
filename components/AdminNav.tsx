@@ -9,6 +9,7 @@ import {
   IconMail,
   IconMusic,
   IconSettings,
+  IconUpload,
   IconUsers,
   IconVideo,
 } from "./icons";
@@ -16,6 +17,7 @@ import {
 const LINKS = [
   { href: "/admin", label: "Dashboard", icon: IconGrid, exact: true },
   { href: "/admin/beats", label: "Beats & uploads", icon: IconMusic },
+  { href: "/admin/import", label: "Bulk import", icon: IconUpload },
   { href: "/admin/videos", label: "Videos", icon: IconVideo },
   { href: "/admin/orders", label: "Orders & payments", icon: IconCard },
   { href: "/admin/artists", label: "Artists", icon: IconUsers },

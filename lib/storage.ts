@@ -63,6 +63,30 @@ export async function saveUpload(
   return { rel: relPath(abs), abs, bytes: buf.byteLength, mime: file.type || guessMime(name), name };
 }
 
+/**
+ * Copy a file that already exists on disk (used by the bulk importer) into the
+ * upload tree, mirroring the naming and visibility rules of `saveUpload`.
+ */
+export async function copyIntoUpload(
+  source: string,
+  subdir: string,
+  opts: { prefix?: string; visibility?: "public" | "private"; name?: string } = {},
+): Promise<{ rel: string; abs: string; bytes: number; mime: string; name: string }> {
+  const stat = fs.statSync(source);
+  if (!stat.isFile()) throw new Error(`${source} is not a file.`);
+  const maxBytes = env.maxUploadMb * 1024 * 1024;
+  if (stat.size > maxBytes) throw new Error(`${path.basename(source)} is larger than ${env.maxUploadMb}MB.`);
+
+  const root = opts.visibility === "private" ? PRIVATE_UPLOAD_ROOT : PUBLIC_UPLOAD_ROOT;
+  const dir = path.join(root, subdir.replace(/^\/+/, ""));
+  ensureDir(dir);
+  const stamp = crypto.randomBytes(4).toString("hex");
+  const name = `${opts.prefix ? `${opts.prefix}-` : ""}${stamp}-${safeName(opts.name ?? path.basename(source))}`;
+  const abs = path.join(dir, name);
+  await fsp.copyFile(source, abs);
+  return { rel: relPath(abs), abs, bytes: stat.size, mime: guessMime(abs), name: path.basename(source) };
+}
+
 export async function writeBuffer(rel: string, data: Buffer | string): Promise<string> {
   const abs = absPath(rel);
   ensureDir(path.dirname(abs));

@@ -737,3 +737,203 @@ export async function resetDemoAction(_prev: ActionState, formData: FormData): P
   revalidatePath("/", "layout");
   redirect("/admin");
 }
+
+/* ------------------------------------------------------------------ */
+/* Bulk import from a server-side folder                               */
+/* ------------------------------------------------------------------ */
+
+export type ImportScan = Awaited<ReturnType<typeof scanImportForAction>>;
+
+async function scanImportForAction() {
+  const { scanImportFolder } = await import("@/lib/importer");
+  return scanImportFolder();
+}
+
+/** Server-side scan used by /admin/import (also exposed for the page component). */
+export async function scanImportAction(): Promise<{
+  dir: string;
+  exists: boolean;
+  beats: unknown[];
+  videos: unknown[];
+}> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { dir: "", exists: false, beats: [], videos: [] };
+  }
+  const plan = await scanImportForAction();
+  return { dir: plan.dir, exists: plan.exists, beats: plan.beats, videos: plan.videos };
+}
+
+export async function importBeatsAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { ok: false, error: "Admin only." };
+  }
+  await ensureBootstrapped();
+
+  const plan = await scanImportForAction();
+  if (!plan.exists) {
+    return { ok: false, error: `Import folder not found. Create it and drop files in: ${plan.dir}` };
+  }
+
+  const { copyIntoUpload } = await import("@/lib/storage");
+  const { importTargets } = await import("@/lib/importer");
+  const fs = await import("node:fs");
+
+  const selected = formData.getAll("key").map(String);
+  const removeSource = formData.get("remove_source") === "on";
+  const publishNow = formData.get("publish") !== "off";
+
+  const beatCandidates = plan.beats.filter((b) => selected.length === 0 || selected.includes(b.key));
+  const videoCandidates = plan.videos.filter((v) => selected.length === 0 || selected.includes(v.key));
+
+  if (beatCandidates.length === 0 && videoCandidates.length === 0) {
+    return { ok: false, error: "Nothing selected to import." };
+  }
+
+  const published: string[] = [];
+  const errors: string[] = [];
+  let videoCount = 0;
+
+  for (const cand of beatCandidates) {
+    const audio = cand.files.filter((f) => f.role === "preview" || f.role === "master");
+    if (audio.length === 0) {
+      errors.push(`${cand.meta.title ?? cand.stem}: no audio file`);
+      continue;
+    }
+    try {
+      const stored: Record<string, string> = {};
+      const consumed: string[] = [];
+      const extras: { saved: { rel: string; mime: string; bytes: number }; name: string; abs: string }[] = [];
+      for (const file of cand.files) {
+        const target = importTargets(cand.slug, file.role);
+        const saved = await copyIntoUpload(file.abs, target.subdir, {
+          prefix: file.role,
+          visibility: target.visibility,
+        });
+        consumed.push(file.abs);
+        if (file.role === "extra") {
+          extras.push({ saved, name: file.name, abs: file.abs });
+          continue;
+        }
+        if (!stored[file.role]) stored[file.role] = saved.rel;
+      }
+
+      const meta = cand.meta;
+      const isFree = meta.is_free === true || (meta.price ?? 1) === 0;
+      const priceCents = Math.max(0, Math.round((meta.price ?? 100) * 100));
+      const tags = Array.isArray(meta.tags) ? meta.tags.join(",") : (meta.tags ?? "");
+
+      const beat = await createBeat({
+        title: meta.title ?? cand.stem,
+        slug: cand.slug,
+        genre: meta.genre ?? "Afrobeats",
+        mood: meta.mood ?? null,
+        tags: tags || null,
+        description: meta.description ?? null,
+        bpm: meta.bpm ?? null,
+        musical_key: meta.key ?? null,
+        price_cents: isFree ? 0 : priceCents,
+        currency: (meta.currency ?? env.currency).toUpperCase(),
+        artwork: stored.artwork ?? null,
+        preview_file: stored.preview ?? stored.master ?? null,
+        full_file: stored.master ?? stored.preview ?? null,
+        trackout_file: stored.trackout ?? null,
+        duration_sec: cand.durationSec ?? null,
+        is_free: isFree ? 1 : 0,
+        published: publishNow && meta.published !== false ? 1 : 0,
+        featured: meta.featured ? 1 : 0,
+      });
+
+      if (!isFree) {
+        const custom = (meta.licences ?? "").trim();
+        if (custom) {
+          let tier = 1;
+          for (const entry of custom.split("|").map((e) => e.trim()).filter(Boolean)) {
+            const [name, price] = entry.split(":");
+            const cents = Math.round(parseFloat(price ?? "0") * 100);
+            if (!name || !Number.isFinite(cents)) continue;
+            await createLicense(beat.id, {
+              name: name.trim(),
+              price_cents: cents,
+              tier: tier++,
+              currency: beat.currency,
+              allows_exclusive: /exclusive/i.test(name) ? 1 : 0,
+              description: `${name.trim()} licence for "${beat.title}".`,
+            });
+          }
+        } else {
+          await ensureDefaultLicenses(beat.id, beat.price_cents, beat.currency);
+        }
+      }
+
+      for (const extra of extras.slice(0, 24)) {
+        await addBeatFile(beat.id, {
+          label: extra.name.replace(/\.[^.]+$/, ""),
+          file_path: extra.saved.rel,
+          mime: extra.saved.mime,
+          bytes: extra.saved.bytes,
+          included_in: "wav,stems",
+        });
+      }
+
+      published.push(beat.title);
+      if (removeSource) for (const abs of consumed) fs.rmSync(abs, { force: true });
+    } catch (err) {
+      errors.push(`${cand.meta.title ?? cand.stem}: ${(err as Error).message}`);
+    }
+  }
+
+  for (const cand of videoCandidates) {
+    const video = cand.files.find((f) => f.role === "video");
+    if (!video) continue;
+    try {
+      const saved = await copyIntoUpload(video.abs, "videos", { prefix: slugify(cand.meta.title ?? cand.stem), visibility: "public" });
+      const poster = cand.files.find((f) => f.role === "artwork");
+      const savedPoster = poster
+        ? await copyIntoUpload(poster.abs, "videos/posters", { prefix: slugify(cand.meta.title ?? cand.stem), visibility: "public" })
+        : null;
+      await createVideo({
+        title: cand.meta.title ?? cand.stem,
+        slug: slugify(cand.meta.title ?? cand.stem),
+        description: cand.meta.description ?? null,
+        kind: "file",
+        file_path: saved.rel,
+        poster: savedPoster?.rel ?? null,
+        duration_sec: cand.durationSec ?? null,
+        published: publishNow && cand.meta.published !== false ? 1 : 0,
+      });
+      videoCount += 1;
+      if (removeSource) {
+        fs.rmSync(video.abs, { force: true });
+        if (poster) fs.rmSync(poster.abs, { force: true });
+      }
+    } catch (err) {
+      errors.push(`video ${cand.stem}: ${(err as Error).message}`);
+    }
+  }
+
+  revalidatePath("/", "layout");
+  revalidatePath("/beats");
+  revalidatePath("/watch");
+  revalidatePath("/admin/beats");
+  revalidatePath("/admin/import");
+
+  const summary = [
+    published.length ? `${published.length} beat${published.length === 1 ? "" : "s"} published` : "",
+    videoCount ? `${videoCount} video${videoCount === 1 ? "" : "s"}` : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  if (!published.length && !videoCount) {
+    return { ok: false, error: errors.join(" · ") || "Nothing was imported." };
+  }
+  return {
+    ok: errors.length === 0,
+    message: `${summary || "Imported"}. ${published.slice(0, 6).join(", ")}${published.length > 6 ? "…" : ""}`,
+    error: errors.length ? errors.join(" · ") : undefined,
+  };
+}
