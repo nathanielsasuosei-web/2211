@@ -9,6 +9,8 @@ import {
 } from "./email-templates";
 import type { Beat, License, Order, User } from "./types";
 import { stripHtml } from "./mail";
+import { getSetting } from "./repo";
+import { accentPalette, normalizeAccent } from "./theme";
 
 const url = (p: string) => `${env.appUrl}${p}`;
 
@@ -22,10 +24,27 @@ function render(subject: string, html: string): RenderedEmail {
   return { subject, html, text: stripHtml(html) };
 }
 
+/** Brand accent for emails — follows Admin → Settings → Accent colour (cached briefly). */
+let accentCache: { value: string; at: number } | null = null;
+async function brandAccent(): Promise<string> {
+  if (accentCache && Date.now() - accentCache.at < 60_000) return accentCache.value;
+  let value = env.accentColor;
+  try {
+    value = await getSetting("accent_color", env.accentColor);
+  } catch {
+    /* fall back to env */
+  }
+  const normalized = normalizeAccent(value);
+  accentCache = { value: normalized, at: Date.now() };
+  return normalized;
+}
+
 /* ------------------------------------------------------------------ */
 
-export function welcomeEmail(user: User): RenderedEmail {
+export async function welcomeEmail(user: User): Promise<RenderedEmail> {
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: `Welcome to ${env.appName}, ${user.name.split(" ")[0]} 👋`,
     preheader: "Your artist account is live — browse the catalogue and license a beat today.",
     body: `
@@ -35,7 +54,7 @@ export function welcomeEmail(user: User): RenderedEmail {
         ["Artist name", user.name],
         ["Member since", new Date(user.created_at).toDateString()],
       ])}
-      ${alertBox("Tip: complete your profile with your phone number so M-Pesa / MoMo checkout is one tap.", "ok")}
+      ${alertBox("Tip: complete your profile with your phone number so M-Pesa / MoMo checkout is one tap.", "ok", accent)}
     `,
     cta: { label: "Browse the beats", url: url("/beats") },
   });
@@ -44,9 +63,11 @@ export function welcomeEmail(user: User): RenderedEmail {
 
 /* ------------------------------------------------------------------ */
 
-export function orderCreatedEmail(opts: { order: Order; beat: Beat; license: License | null; user: User }): RenderedEmail {
+export async function orderCreatedEmail(opts: { order: Order; beat: Beat; license: License | null; user: User }): Promise<RenderedEmail> {
   const { order, beat, license, user } = opts;
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: `Order ${order.reference} created`,
     preheader: `Complete payment to receive "${beat.title}".`,
     body: `
@@ -59,7 +80,7 @@ export function orderCreatedEmail(opts: { order: Order; beat: Beat; license: Lic
         ["Order reference", order.reference],
         ["Status", order.status.replace("_", " ")],
       ])}
-      ${alertBox(`Hold your order open — unpaid orders expire after 60 minutes.`)}
+      ${alertBox(`Hold your order open — unpaid orders expire after 60 minutes.`, "warn", accent)}
     `,
     cta: { label: "Complete payment", url: url(`/checkout/${order.reference}`) },
   });
@@ -68,10 +89,12 @@ export function orderCreatedEmail(opts: { order: Order; beat: Beat; license: Lic
 
 /* ------------------------------------------------------------------ */
 
-export function bankTransferEmail(opts: { order: Order; beat: Beat; user: User }): RenderedEmail {
+export async function bankTransferEmail(opts: { order: Order; beat: Beat; user: User }): Promise<RenderedEmail> {
   const { order, beat, user } = opts;
+  const accent = await brandAccent();
   const b = env.bank;
   const html = emailShell({
+    accent,
     title: "Bank / mobile money transfer details",
     preheader: `Send ${moneyLabel(order.amount_cents, order.currency)} and confirm your reference.`,
     body: `
@@ -87,7 +110,7 @@ export function bankTransferEmail(opts: { order: Order; beat: Beat; user: User }
         ["Mobile money", `${b.momoName} — ${b.momoNumber}`],
       ])}
       ${paragraphs(b.instructions)}
-      ${alertBox("After sending, submit the transaction reference below. We verify payments within a few minutes and your files are emailed automatically.", "ok")}
+      ${alertBox("After sending, submit the transaction reference below. We verify payments within a few minutes and your files are emailed automatically.", "ok", accent)}
     `,
     cta: { label: "I have paid — confirm", url: url(`/checkout/${order.reference}`) },
   });
@@ -96,7 +119,7 @@ export function bankTransferEmail(opts: { order: Order; beat: Beat; user: User }
 
 /* ------------------------------------------------------------------ */
 
-export function deliveryEmail(opts: {
+export async function deliveryEmail(opts: {
   order: Order;
   beat: Beat;
   buyer: User;
@@ -104,9 +127,11 @@ export function deliveryEmail(opts: {
   bundle: { zipName: string; bytes: number };
   downloadUrl: string;
   studioUrl: string;
-}): RenderedEmail {
+}): Promise<RenderedEmail> {
   const { order, beat, buyer, license, bundle, downloadUrl, studioUrl } = opts;
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: `Paid ✅ "${beat.title}" is yours`,
     preheader: `Your ${license?.name ?? "licence"} files are attached, plus a secure download link.`,
     body: `
@@ -120,12 +145,15 @@ export function deliveryEmail(opts: {
         ["Date", new Date().toUTCString()],
       ])}
       <p style="margin:0 0 8px;font-weight:700;color:#fff;">In this delivery</p>
-      ${fileList([
-        { label: bundle.zipName, note: "attached to this email" },
-        { label: "Licence certificate (TXT)", note: "inside the ZIP" },
-        ...(license?.perks ? (JSON.parse(license.perks) as string[]).map((p) => ({ label: p })) : []),
-      ])}
-      ${alertBox(`Secure download: <a href="${escapeHtml(downloadUrl)}" style="color:#ff6a63;">${escapeHtml(downloadUrl)}</a><br/>Keep it private — it is tied to your account.`, "ok")}
+      ${fileList(
+        [
+          { label: bundle.zipName, note: "attached to this email" },
+          { label: "Licence certificate (TXT)", note: "inside the ZIP" },
+          ...(license?.perks ? (JSON.parse(license.perks) as string[]).map((p) => ({ label: p })) : []),
+        ],
+        accent,
+      )}
+      ${alertBox(`Secure download: <a href="${escapeHtml(downloadUrl)}" style="color:${accentPaletteHot(accent)};">${escapeHtml(downloadUrl)}</a><br/>Keep it private — it is tied to your account.`, "ok", accent)}
     `,
     cta: { label: "Open my Vault", url: studioUrl },
     footnote: `Questions about splits, stems or an exclusive buy-out? Reply to this email — the producer reads every message.`,
@@ -135,9 +163,11 @@ export function deliveryEmail(opts: {
 
 /* ------------------------------------------------------------------ */
 
-export function adminOrderEmail(opts: { order: Order; beat: Beat; buyer: User; license: License | null }): RenderedEmail {
+export async function adminOrderEmail(opts: { order: Order; beat: Beat; buyer: User; license: License | null }): Promise<RenderedEmail> {
   const { order, beat, buyer, license } = opts;
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: "New paid order 🎉",
     preheader: `${buyer.name} paid ${moneyLabel(order.amount_cents, order.currency)} for "${beat.title}".`,
     body: `
@@ -159,9 +189,11 @@ export function adminOrderEmail(opts: { order: Order; beat: Beat; buyer: User; l
 
 /* ------------------------------------------------------------------ */
 
-export function pendingBankOrderAdminEmail(opts: { order: Order; beat: Beat; buyer: User }): RenderedEmail {
+export async function pendingBankOrderAdminEmail(opts: { order: Order; beat: Beat; buyer: User }): Promise<RenderedEmail> {
   const { order, beat, buyer } = opts;
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: "Bank transfer awaiting review",
     preheader: `${buyer.name} submitted a transfer reference for "${beat.title}".`,
     body: `
@@ -173,7 +205,7 @@ export function pendingBankOrderAdminEmail(opts: { order: Order; beat: Beat; buy
         ["Note", order.bank_note ?? "—"],
         ["Order", order.reference],
       ])}
-      ${alertBox("Confirm the money landed in your account, then mark the order as received to release the files.")}
+      ${alertBox("Confirm the money landed in your account, then mark the order as received to release the files.", "warn", accent)}
     `,
     cta: { label: "Review order", url: url(`/admin/orders?ref=${order.reference}`) },
   });
@@ -182,16 +214,18 @@ export function pendingBankOrderAdminEmail(opts: { order: Order; beat: Beat; buy
 
 /* ------------------------------------------------------------------ */
 
-export function adminMessageEmail(opts: {
+export async function adminMessageEmail(opts: {
   to: { name: string; email: string };
   subject: string;
   body: string;
   fromName: string;
   includeBeat?: Beat | null;
-}): RenderedEmail {
+}): Promise<RenderedEmail> {
   const { to, subject, body, fromName, includeBeat } = opts;
   void to;
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: subject,
     preheader: body.slice(0, 120),
     body: `
@@ -206,8 +240,10 @@ export function adminMessageEmail(opts: {
 
 /* ------------------------------------------------------------------ */
 
-export function contactNotificationEmail(opts: { name: string; email: string; subject: string; message: string; phone?: string }): RenderedEmail {
+export async function contactNotificationEmail(opts: { name: string; email: string; subject: string; message: string; phone?: string }): Promise<RenderedEmail> {
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: "New message from the website",
     preheader: `${opts.name} — ${opts.subject}`,
     body: `
@@ -226,13 +262,15 @@ export function contactNotificationEmail(opts: { name: string; email: string; su
 
 /* ------------------------------------------------------------------ */
 
-export function contactAutoReplyEmail(opts: { name: string; subject: string }): RenderedEmail {
+export async function contactAutoReplyEmail(opts: { name: string; subject: string }): Promise<RenderedEmail> {
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: "We got your message",
     preheader: "The producer will get back to you shortly.",
     body: `
       ${paragraphs(`Hi ${opts.name}, thanks for reaching out about "${opts.subject}". Messages land directly with the producer — expect a reply within 24 hours.`)}
-      ${alertBox("Need files for a session today? Browse ready-to-license beats in the store.", "ok")}
+      ${alertBox("Need files for a session today? Browse ready-to-license beats in the store.", "ok", accent)}
     `,
     cta: { label: "Browse beats", url: url("/beats") },
   });
@@ -241,14 +279,16 @@ export function contactAutoReplyEmail(opts: { name: string; subject: string }): 
 
 /* ------------------------------------------------------------------ */
 
-export function passwordResetEmail(opts: { user: User; token: string }): RenderedEmail {
+export async function passwordResetEmail(opts: { user: User; token: string }): Promise<RenderedEmail> {
   const link = url(`/reset-password?token=${encodeURIComponent(opts.token)}`);
+  const accent = await brandAccent();
   const html = emailShell({
+    accent,
     title: "Reset your password",
     preheader: "This link expires in 30 minutes.",
     body: `
       ${paragraphs(`Hi ${opts.user.name.split(" ")[0]}, we received a request to reset the password for ${opts.user.email}.`)}
-      ${alertBox(`If you did not request this, ignore this email — your password stays the same.`)}
+      ${alertBox(`If you did not request this, ignore this email — your password stays the same.`, "warn", accent)}
     `,
     cta: { label: "Choose a new password", url: link },
   });
@@ -266,4 +306,12 @@ export function methodLabel(method: string): string {
     free: "Free download",
   };
   return map[method] ?? method;
+}
+
+/** Lighter accent tint for inline links inside email bodies. */
+function accentPaletteHot(accent: string): string {
+  // local import avoided at top to keep the diff small; theme is isomorphic
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { accentPalette } = require("./theme") as typeof import("./theme");
+  return accentPalette(accent).hot;
 }

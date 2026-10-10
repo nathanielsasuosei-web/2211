@@ -18,11 +18,11 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
     <div className="section section--tight">
       <div className="wrap auth-grid">
         <div className="stack" style={{ gap: 16 }}>
-          <span className="eyebrow">Free artist account</span>
-          <h1 className="display h-lg">
+          <span className="eyebrow fade-up" style={{ animationDelay: "0.05s" }}>Free artist account</span>
+          <h1 className="display h-lg fade-up" style={{ animationDelay: "0.12s" }}>
             Your beats, <span className="red">your vault</span>
           </h1>
-          <p className="lede">
+          <p className="lede fade-up" style={{ animationDelay: "0.2s" }}>
             Create an account to license beats, pay with mobile money or card, and keep every file, licence certificate
             and receipt in one private place.
           </p>
@@ -32,14 +32,14 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
               ["Unlimited re-downloads from your Vault", <IconDownload key="d" size={13} />],
               ["Direct messages with the producer", <IconCheck key="c" size={13} />],
               ["Secure checkout — no card details stored here", <IconShield key="s" size={13} />],
-            ].map(([label, icon]) => (
-              <span key={String(label)} className="row" style={{ gap: 10 }}>
+            ].map(([label, icon], i) => (
+              <span key={String(label)} className="row fade-up" style={{ gap: 10, animationDelay: `${0.28 + i * 0.07}s` }}>
                 <span className="chip chip--red">{icon}</span>
                 <span className="muted" style={{ fontSize: 14 }}>{label as string}</span>
               </span>
             ))}
           </div>
-          <p className="tiny dim">
+          <p className="tiny dim fade-up" style={{ animationDelay: "0.58s" }}>
             Already registered? <Link href="/login" className="red">Sign in</Link>
           </p>
         </div>

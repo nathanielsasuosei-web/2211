@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { saveSettingsAction } from "@/lib/actions/admin";
 import { useActionToast } from "./Toast";
 import { IconCheck } from "./icons";
+import { ACCENT_PRESETS, DEFAULT_ACCENT, normalizeAccent } from "@/lib/theme";
 
 const FIELDS: Array<{ key: string; label: string; type?: "text" | "textarea" | "email" | "tel"; hint?: string }> = [
   { key: "brand_name", label: "Brand / producer name" },
@@ -26,6 +27,7 @@ const FIELDS: Array<{ key: string; label: string; type?: "text" | "textarea" | "
 export default function SettingsForm({ settings }: { settings: Record<string, string> }) {
   const [state, action, pending] = useActionState(saveSettingsAction, undefined);
   useActionToast(state);
+  const [accent, setAccent] = useState(() => normalizeAccent(settings.accent_color || DEFAULT_ACCENT));
 
   return (
     <form action={action} className="panel pad-lg stack" style={{ gap: 16 }}>
@@ -34,6 +36,75 @@ export default function SettingsForm({ settings }: { settings: Record<string, st
         <p className="tiny muted" style={{ margin: 0, lineHeight: 1.6 }}>
           These values drive the hero, footer, About page and outgoing emails.
         </p>
+      </div>
+
+      {/* ── Accent colour ─────────────────────────────────────────── */}
+      <div className="panel panel--flat pad stack" style={{ gap: 14, borderColor: "rgba(var(--accent-rgb), 0.35)" }}>
+        <div className="stack" style={{ gap: 4 }}>
+          <strong style={{ fontSize: 14.5 }}>Accent colour</strong>
+          <p className="tiny muted" style={{ margin: 0, lineHeight: 1.6 }}>
+            The one colour that themes the whole store — buttons, glows, the hero, the navbar hairline and emails.
+            Visitors can override it per-device with the palette button in the navbar.
+          </p>
+        </div>
+
+        <div className="theme-swatches" style={{ gridTemplateColumns: "repeat(10, 1fr)", maxWidth: 460 }}>
+          {ACCENT_PRESETS.map((p) => (
+            <button
+              key={p.hex}
+              type="button"
+              className="theme-swatch"
+              style={{ background: p.hex }}
+              data-active={accent === p.hex}
+              onClick={() => setAccent(p.hex)}
+              aria-label={p.name}
+              title={p.name}
+            />
+          ))}
+        </div>
+
+        <div className="row row--wrap" style={{ gap: 10 }}>
+          <input
+            type="color"
+            value={accent}
+            onChange={(e) => setAccent(normalizeAccent(e.target.value))}
+            aria-label="Accent colour picker"
+            style={{
+              width: 46,
+              height: 42,
+              padding: 3,
+              borderRadius: 10,
+              cursor: "pointer",
+              background: "rgba(0,0,0,0.35)",
+              border: "1px solid var(--line-strong)",
+            }}
+          />
+          <input
+            name="accent_color"
+            className="input"
+            style={{ maxWidth: 150, fontFamily: "var(--font-mono)" }}
+            value={accent}
+            onChange={(e) => setAccent(e.target.value)}
+            onBlur={() => setAccent(normalizeAccent(accent))}
+            spellCheck={false}
+            aria-label="Accent colour hex"
+          />
+          <span
+            className="chip"
+            style={{
+              background: accent,
+              color: "#fff",
+              borderColor: "transparent",
+              fontWeight: 800,
+              textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+            }}
+          >
+            Live preview
+          </span>
+          <span className="tiny dim" style={{ alignSelf: "center" }}>
+            Applies instantly after saving.
+          </span>
+        </div>
       </div>
 
       <div className="form-grid">

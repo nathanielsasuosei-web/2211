@@ -175,7 +175,7 @@ export async function fulfillOrder(orderId: string, opts: { silent?: boolean } =
   const studioUrl = `${env.appUrl}/studio?tab=vault`;
 
   if (!opts.silent) {
-    const mail = deliveryEmail({ order, beat, buyer, license, bundle, downloadUrl, studioUrl });
+    const mail = await deliveryEmail({ order, beat, buyer, license, bundle, downloadUrl, studioUrl });
     const attach = bundle.bytes <= 12 * 1024 * 1024 ? [{ filename: bundle.zipName, path: bundle.zipPath }] : [];
     await sendMail({
       to: buyer.email,
@@ -200,7 +200,7 @@ export async function fulfillOrder(orderId: string, opts: { silent?: boolean } =
       beat_id: beat.id,
     });
 
-    const adminMail = adminOrderEmail({ order, beat, buyer, license });
+    const adminMail = await adminOrderEmail({ order, beat, buyer, license });
     await sendMail({
       to: env.adminMail,
       subject: adminMail.subject,

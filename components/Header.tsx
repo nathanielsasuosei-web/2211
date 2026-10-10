@@ -2,36 +2,58 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconClose, IconMenu, IconUser } from "./icons";
+import ThemePicker from "./ThemePicker";
 import { NAV_LINKS } from "@/lib/site-data";
 import type { SessionUser } from "@/lib/types";
 
 export default function Header({
   session,
   brandName,
+  brandAccent,
   unread = 0,
 }: {
   session: SessionUser | null;
   brandName: string;
+  brandAccent: string;
   unread?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const lastY = useRef(0);
 
   useEffect(() => setOpen(false), [pathname]);
+
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
+    lastY.current = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      setScrolled(y > 12);
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setProgress(max > 0 ? Math.min(1, y / max) : 0);
+      // tuck the navbar away on scroll-down, glide it back on scroll-up
+      if (y > lastY.current + 6 && y > 160) setHidden(true);
+      else if (y < lastY.current - 4 || y <= 160) setHidden(false);
+      lastY.current = y;
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // never hide while the mobile menu is open
+  useEffect(() => {
+    if (open) setHidden(false);
+  }, [open]);
+
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <header className="header" data-scrolled={scrolled}>
+    <header className="header" data-scrolled={scrolled} data-hidden={hidden}>
       <div className="wrap header__inner">
         <Link href="/" className="brand" aria-label={`${brandName} home`}>
           <span className="brand__mark">
@@ -64,6 +86,8 @@ export default function Header({
         </nav>
 
         <div className="row" style={{ gap: 8 }}>
+          <ThemePicker brandAccent={brandAccent} />
+
           <Link href="/beats" className="btn btn--ghost btn--sm hide-sm">
             <span className="eq" aria-hidden="true">
               <i />
@@ -116,6 +140,8 @@ export default function Header({
           </button>
         </div>
       </div>
+
+      <span className="header__progress" style={{ width: `${Math.round(progress * 100)}%` }} aria-hidden="true" />
 
       {open && (
         <div className="wrap" style={{ paddingBottom: 16 }}>

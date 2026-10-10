@@ -64,6 +64,7 @@ export const LICENSE_INCLUDES = ["mp3", "wav", "stems", "trackout", "performance
 export type PublicSettings = {
   brandName: string;
   tagline: string;
+  accentColor: string;
   heroEyebrow: string;
   heroLine1: string;
   heroLine2: string;
