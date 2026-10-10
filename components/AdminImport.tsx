@@ -77,7 +77,7 @@ export default function AdminImport({ beats, videos }: { beats: BeatRow[]; video
           <label
             key={b.key}
             className="panel panel--flat pad stack"
-            style={{ gap: 10, cursor: "pointer", borderColor: selected[b.key] ? "rgba(225,6,0,.45)" : undefined }}
+            style={{ gap: 10, cursor: "pointer", borderColor: selected[b.key] ? "rgba(var(--accent-rgb), .45)" : undefined }}
           >
             <input type="checkbox" name="key" value={b.key} checked={!!selected[b.key]} onChange={(e) => setSelected((s) => ({ ...s, [b.key]: e.target.checked }))} style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
             <div className="row row--between row--wrap" style={{ gap: 10 }}>
@@ -122,7 +122,7 @@ export default function AdminImport({ beats, videos }: { beats: BeatRow[]; video
           <label
             key={v.key}
             className="panel panel--flat pad row row--between row--wrap"
-            style={{ gap: 10, cursor: "pointer", borderColor: selected[v.key] ? "rgba(225,6,0,.45)" : undefined }}
+            style={{ gap: 10, cursor: "pointer", borderColor: selected[v.key] ? "rgba(var(--accent-rgb), .45)" : undefined }}
           >
             <input type="checkbox" name="key" value={v.key} checked={!!selected[v.key]} onChange={(e) => setSelected((s) => ({ ...s, [v.key]: e.target.checked }))} style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
             <span className="row" style={{ gap: 10 }}>

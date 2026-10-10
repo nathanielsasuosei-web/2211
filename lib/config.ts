@@ -35,6 +35,8 @@ export const env = {
 
   appName: str("APP_NAME", "2211 BEATS"),
   appTagline: str("APP_TAGLINE", "Premium beats for serious artists"),
+  /** Store-wide default accent colour (admin can override in Settings). */
+  accentColor: str("ACCENT_COLOR", "#e10600"),
   appUrl: str("APP_URL", "http://localhost:3000").replace(/\/$/, ""),
   appSecret: str("APP_SECRET", "dev-secret-please-change-me-in-production-2211"),
 

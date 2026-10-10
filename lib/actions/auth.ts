@@ -58,7 +58,7 @@ export async function signupAction(_prev: ActionState, formData: FormData): Prom
 
   await startSession({ id: user.id, email: user.email, name: user.name, role: user.role });
 
-  const mail = welcomeEmail(user);
+  const mail = await welcomeEmail(user);
   await sendMail({ to: user.email, subject: mail.subject, html: mail.html, text: mail.text, userId: user.id });
 
   await createMessage({

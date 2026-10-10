@@ -79,7 +79,7 @@ export default async function HomePage() {
       </section>
 
       {/* ── How it works ───────────────────────────────────────────── */}
-      <section className="section" style={{ background: "linear-gradient(180deg, transparent, rgba(225,6,0,0.06), transparent)" }}>
+      <section className="section" style={{ background: "linear-gradient(180deg, transparent, rgba(var(--accent-rgb), 0.06), transparent)" }}>
         <div className="wrap">
           <div className="stack" style={{ gap: 12, marginBottom: 30 }}>
             <span className="eyebrow">How it works</span>

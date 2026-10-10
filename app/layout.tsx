@@ -10,6 +10,7 @@ import { getSession } from "@/lib/auth";
 import { unreadMessageCount } from "@/lib/repo";
 import { ensureBootstrapped } from "@/lib/bootstrap";
 import { env } from "@/lib/config";
+import { normalizeAccent, themeCssVars, themeInitScript } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
@@ -47,24 +48,30 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = {
-  themeColor: "#0a0a0e",
-  colorScheme: "dark",
-  width: "device-width",
-  initialScale: 1,
-};
+export async function generateViewport(): Promise<Viewport> {
+  const settings = await getSiteSettings().catch(() => null);
+  return {
+    themeColor: normalizeAccent(settings?.accentColor ?? env.accentColor),
+    colorScheme: "dark",
+    width: "device-width",
+    initialScale: 1,
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   await ensureBootstrapped();
   const [settings, session] = await Promise.all([getSiteSettings(), getSession()]);
   const unread = session ? await unreadMessageCount(session.id) : 0;
+  const accent = normalizeAccent(settings.accentColor);
 
   return (
-    <html lang="en">
+    <html lang="en" style={themeCssVars(accent) as React.CSSProperties} suppressHydrationWarning>
       <body>
+        {/* Applies a visitor's saved accent colour before first paint (no flash). */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <PlayerProvider>
           <ToastProvider>
-            <Header session={session} brandName={settings.brandName} unread={unread} />
+            <Header session={session} brandName={settings.brandName} brandAccent={accent} unread={unread} />
             <main id="main">{children}</main>
             <Footer settings={settings} />
             <PlayerBar />
