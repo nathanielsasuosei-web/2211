@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePlayer } from "./player-context";
+import { accentPalette, THEME_EVENT, type AccentPalette } from "@/lib/theme";
 
 type Props = {
   /** 0..1 base intensity when nothing is playing */
@@ -10,17 +11,36 @@ type Props = {
 };
 
 /**
- * Animated hero canvas: drifting particles, a pulsing red spectrum driven by
- * the live audio analyser (or procedural noise when idle), plus rotating arcs.
- * Respects prefers-reduced-motion and pauses when off-screen.
+ * Animated hero canvas: drifting particles, a pulsing spectrum driven by the
+ * live audio analyser (or procedural noise when idle), plus rotating arcs.
+ * Colours follow the active accent theme (CSS var --accent, changed via the
+ * navbar palette picker or the admin setting). Respects
+ * prefers-reduced-motion and pauses when off-screen.
  */
 export default function HeroCanvas({ idle = 0.35, className }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { levels, isPlaying } = usePlayer();
   const levelsRef = useRef(levels);
   const playingRef = useRef(isPlaying);
+  const paletteRef = useRef<AccentPalette>(accentPalette(null));
   levelsRef.current = levels;
   playingRef.current = isPlaying;
+
+  /* Track the live accent colour: read the CSS var, refresh on theme changes. */
+  useEffect(() => {
+    const read = () => {
+      const hex = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+      paletteRef.current = accentPalette(hex || null);
+    };
+    read();
+    const onTheme = () => read();
+    document.documentElement.addEventListener(THEME_EVENT, onTheme);
+    const interval = window.setInterval(read, 1500); // cheap safety net
+    return () => {
+      document.documentElement.removeEventListener(THEME_EVENT, onTheme);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -70,6 +90,17 @@ export default function HeroCanvas({ idle = 0.35, className }: Props) {
       if (!visible) return;
       t += reduce ? 0.002 : 0.011;
 
+      const pal = paletteRef.current;
+      const [r, g, b] = pal.rgb.split(",").map((v) => parseInt(v.trim(), 10));
+      const [dr, dg, db] = pal.deep
+        .slice(1)
+        .match(/../g)!
+        .map((v) => parseInt(v, 16));
+      const [br, bg, bb] = pal.bright
+        .slice(1)
+        .match(/../g)!
+        .map((v) => parseInt(v, 16));
+
       ctx.clearRect(0, 0, width, height);
 
       /* --- rotating arcs (right side) ---------------------------- */
@@ -82,12 +113,15 @@ export default function HeroCanvas({ idle = 0.35, className }: Props) {
       ctx.save();
       ctx.translate(cx, cy);
       for (let ring = 0; ring < 5; ring++) {
-        const r = maxR * (0.34 + ring * 0.16) * (1 + energy * 0.06);
+        const ringR = Math.max(0, Math.min(r - ring * 12, 255));
+        const ringG = Math.max(0, Math.min(g + ring * 14, 255));
+        const ringB = Math.max(0, Math.min(b + ring * 8, 255));
+        const rr = maxR * (0.34 + ring * 0.16) * (1 + energy * 0.06);
         const rot = t * (ring % 2 === 0 ? 1 : -1) * (0.5 + ring * 0.16);
         ctx.rotate(rot * 0.12);
         ctx.beginPath();
-        ctx.arc(0, 0, r, 0.15 * ring, Math.PI * (1.15 + 0.16 * ring));
-        ctx.strokeStyle = `rgba(${225 - ring * 12}, ${30 + ring * 14}, ${20 + ring * 8}, ${0.4 - ring * 0.06})`;
+        ctx.arc(0, 0, rr, 0.15 * ring, Math.PI * (1.15 + 0.16 * ring));
+        ctx.strokeStyle = `rgba(${ringR}, ${ringG}, ${ringB}, ${0.4 - ring * 0.06})`;
         ctx.lineWidth = 1.4 + ring * 0.4;
         ctx.stroke();
       }
@@ -95,8 +129,8 @@ export default function HeroCanvas({ idle = 0.35, className }: Props) {
 
       /* --- glow core ---------------------------------------------- */
       const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 1.05);
-      glow.addColorStop(0, `rgba(225, 6, 0, ${0.26 + energy * 0.22})`);
-      glow.addColorStop(0.45, `rgba(140, 4, 0, ${0.1 + energy * 0.1})`);
+      glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.26 + energy * 0.22})`);
+      glow.addColorStop(0.45, `rgba(${dr}, ${dg}, ${db}, ${0.1 + energy * 0.1})`);
       glow.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = glow;
       ctx.beginPath();
@@ -114,7 +148,7 @@ export default function HeroCanvas({ idle = 0.35, className }: Props) {
         const py = p.y * height;
         ctx.beginPath();
         ctx.arc(px, py, p.r * (1 + energy * 0.7), 0, Math.PI * 2);
-        ctx.fillStyle = `hsla(${p.hue}, 96%, ${55 + energy * 12}%, ${p.o * (0.55 + energy)})`;
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${p.o * (0.55 + energy)})`;
         ctx.fill();
       }
 
@@ -135,14 +169,14 @@ export default function HeroCanvas({ idle = 0.35, className }: Props) {
         const h = Math.max(3, amp * height * 0.34);
         const x = i * bw;
         const grad = ctx.createLinearGradient(0, baseY - h, 0, baseY);
-        grad.addColorStop(0, `rgba(255, ${90 + amp * 90}, ${80 + amp * 60}, ${0.55 + amp * 0.4})`);
-        grad.addColorStop(1, "rgba(120, 3, 0, 0.04)");
+        grad.addColorStop(0, `rgba(${Math.min(255, br + amp * 20)}, ${Math.min(255, bg + amp * 60)}, ${Math.min(255, bb + amp * 50)}, ${0.55 + amp * 0.4})`);
+        grad.addColorStop(1, `rgba(${dr}, ${dg}, ${db}, 0.04)`);
         ctx.fillStyle = grad;
         ctx.fillRect(x + bw * 0.18, baseY - h, bw * 0.64, h);
       }
 
       /* --- horizon line ------------------------------------------- */
-      ctx.strokeStyle = `rgba(225, 6, 0, ${0.22 + energy * 0.3})`;
+      ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${0.22 + energy * 0.3})`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, baseY - 0.5);

@@ -1,12 +1,14 @@
 import "server-only";
 import { cache } from "react";
 import { env } from "./config";
+import { normalizeAccent } from "./theme";
 import { getAllSettings } from "./repo";
 import { ensureBootstrapped } from "./bootstrap";
 
 export type SiteSettings = {
   brandName: string;
   tagline: string;
+  accentColor: string;
   heroEyebrow: string;
   heroLine1: string;
   heroLine2: string;
@@ -30,6 +32,7 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
   return {
     brandName: s.brand_name || env.appName,
     tagline: s.brand_tagline || env.appTagline,
+    accentColor: normalizeAccent(s.accent_color || env.accentColor),
     heroEyebrow: s.hero_eyebrow || "Produced in Accra · Licensed worldwide",
     heroLine1: s.hero_line_1 || "BEATS THAT",
     heroLine2: s.hero_line_2 || "MOVE",

@@ -1,11 +1,12 @@
 import { env } from "./config";
+import { accentPalette, normalizeAccent } from "./theme";
 
 /**
- * Shared HTML shell for every outgoing email — red/black brand, works in
- * Gmail, Outlook and Apple Mail (tables + inline styles only).
+ * Shared HTML shell for every outgoing email — accent/black brand, works in
+ * Gmail, Outlook and Apple Mail (tables + inline styles only). The accent
+ * follows the store's brand colour (Admin → Settings → Accent colour).
  */
 
-const RED = "#e10600";
 const DARK = "#0b0b0d";
 
 export function emailShell(opts: {
@@ -14,8 +15,13 @@ export function emailShell(opts: {
   body: string;
   cta?: { label: string; url: string };
   footnote?: string;
+  /** Accent override; defaults to the configured brand accent. */
+  accent?: string;
 }): string {
   const { title, preheader = "", body, cta, footnote } = opts;
+  const pal = accentPalette(opts.accent ?? env.accentColor);
+  const RED = pal.accent;
+  const DEEP = pal.deep;
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -30,7 +36,7 @@ export function emailShell(opts: {
         <td align="center">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;background:${DARK};border:1px solid #23232a;border-radius:18px;overflow:hidden;">
             <tr>
-              <td style="background:linear-gradient(120deg, ${RED} 0%, #7a0300 55%, ${DARK} 100%);padding:26px 28px;">
+              <td style="background:linear-gradient(120deg, ${RED} 0%, ${DEEP} 55%, ${DARK} 100%);padding:26px 28px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
                     <td style="font-size:22px;font-weight:800;letter-spacing:2px;color:#ffffff;text-transform:uppercase;">
@@ -106,14 +112,15 @@ export function keyValueTable(rows: Array<[string, string]>): string {
   </table>`;
 }
 
-export function fileList(items: Array<{ label: string; url?: string; note?: string }>): string {
+export function fileList(items: Array<{ label: string; url?: string; note?: string }>, accent?: string): string {
   if (!items.length) return "";
+  const link = accentPalette(accent ?? env.accentColor).hot;
   return `<ul style="margin:14px 0;padding-left:20px;">
     ${items
       .map(
         (f) =>
           `<li style="margin-bottom:8px;font-size:14px;color:#e6e6ee;">
-            ${f.url ? `<a href="${escapeAttr(f.url)}" style="color:#ff6a63;text-decoration:underline;">${escapeHtml(f.label)}</a>` : escapeHtml(f.label)}
+            ${f.url ? `<a href="${escapeAttr(f.url)}" style="color:${link};text-decoration:underline;">${escapeHtml(f.label)}</a>` : escapeHtml(f.label)}
             ${f.note ? `<span style="color:#8b8b96;"> — ${escapeHtml(f.note)}</span>` : ""}
           </li>`,
       )
@@ -121,8 +128,8 @@ export function fileList(items: Array<{ label: string; url?: string; note?: stri
   </ul>`;
 }
 
-export function alertBox(text: string, tone: "warn" | "ok" = "warn"): string {
+export function alertBox(text: string, tone: "warn" | "ok" = "warn", accent?: string): string {
   const bg = tone === "ok" ? "#0f2a17" : "#2a1010";
-  const border = tone === "ok" ? "#1f7a3d" : RED;
+  const border = tone === "ok" ? "#1f7a3d" : normalizeAccent(accent || env.accentColor);
   return `<div style="margin:16px 0;padding:14px 16px;border-left:4px solid ${border};background:${bg};border-radius:8px;font-size:14px;color:#e6e6ee;">${text}</div>`;
 }

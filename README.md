@@ -100,8 +100,10 @@ For a clean shop: `Admin → Settings → Reset demo data` (or `npm run db:reset
   that emails one artist or **all** artists and lands in their Studio inbox.
 - **Email outbox** — every email the platform sent, with transport, status, attachments and errors.
 - **Settings** — storefront copy (brand, tagline, hero lines, bio, contact details, socials),
-  integration status for Paystack / M-Pesa / bank / SMTP / database, webhook URLs, test email,
-  demo-data reset.
+  **accent colour** (one hex themes buttons, glows, the hero canvas, the navbar hairline and every
+  outgoing email — visitors can also override it per-device with the palette button in the navbar,
+  saved to localStorage and applied before first paint), integration status for Paystack / M-Pesa /
+  bank / SMTP / database, webhook URLs, test email, demo-data reset.
 
 ### Storefront
 - `/` animated hero (canvas waveform + equaliser + kinetic type), featured beats, genre shortcuts,
@@ -157,6 +159,7 @@ file.
 | --- | --- | --- |
 | `APP_URL` | Public base URL used in emails, callbacks and download links | `http://localhost:3000` |
 | `APP_NAME` / `APP_TAGLINE` | Brand shown everywhere | `2211 BEATS` |
+| `ACCENT_COLOR` | Default accent colour (hex) for the whole theme; changeable in Admin → Settings | `#e10600` |
 | `APP_SECRET` | JWT signing secret — **change in production** | dev value |
 | `DATABASE_URL` | `postgres://…` for PostgreSQL; empty → SQLite at `storage/app.db` | empty |
 | `CURRENCY` | Store currency (ISO 4217) | `GHS` |

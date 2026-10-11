@@ -18,6 +18,7 @@ import {
   ensureDefaultLicenses,
   getBeatById,
   getMessage,
+  getSetting,
   getOrderByRef,
   getUserByEmail,
   getUserById,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/repo";
 import type { User } from "@/lib/types";
 import { saveUpload } from "@/lib/storage";
+import { normalizeAccent } from "@/lib/theme";
 import { sendMail } from "@/lib/mail";
 import { adminMessageEmail, contactAutoReplyEmail, contactNotificationEmail } from "@/lib/emails";
 import { fulfillOrder, failOrder } from "@/lib/fulfillment";
@@ -497,7 +499,7 @@ export async function sendArtistMessageAction(_prev: ActionState, formData: Form
   let sent = 0;
 
   for (const target of targets) {
-    const mail = adminMessageEmail({ to: target, subject, body, fromName, includeBeat });
+    const mail = await adminMessageEmail({ to: target, subject, body, fromName, includeBeat });
     const result = await sendMail({
       to: target.email,
       subject: mail.subject,
@@ -570,7 +572,7 @@ export async function replyToMessageAction(_prev: ActionState, formData: FormDat
   });
 
   if (toEmail) {
-    const mail = adminMessageEmail({ to: { name: toName, email: toEmail }, subject, body, fromName: session.name });
+    const mail = await adminMessageEmail({ to: { name: toName, email: toEmail }, subject, body, fromName: session.name });
     await sendMail({
       to: toEmail,
       subject: mail.subject,
@@ -621,7 +623,7 @@ export async function contactAction(_prev: ActionState, formData: FormData): Pro
     body: data.message,
   });
 
-  const notify = contactNotificationEmail({
+  const notify = await contactNotificationEmail({
     name: data.name,
     email: data.email,
     subject: data.subject,
@@ -630,7 +632,7 @@ export async function contactAction(_prev: ActionState, formData: FormData): Pro
   });
   await sendMail({ to: env.adminMail, subject: notify.subject, html: notify.html, text: notify.text });
 
-  const auto = contactAutoReplyEmail({ name: data.name, subject: data.subject });
+  const auto = await contactAutoReplyEmail({ name: data.name, subject: data.subject });
   await sendMail({ to: data.email, subject: auto.subject, html: auto.html, text: auto.text });
 
   revalidatePath("/admin/messages");
@@ -671,6 +673,12 @@ export async function saveSettingsAction(_prev: ActionState, formData: FormData)
       await setSetting(key, value.trim());
       count++;
     }
+  }
+  // Accent colour is validated/normalised so a bad value can never break the theme.
+  const accent = formData.get("accent_color");
+  if (typeof accent === "string") {
+    await setSetting("accent_color", normalizeAccent(accent));
+    count++;
   }
   revalidatePath("/", "layout");
   revalidatePath("/admin/settings");
@@ -713,7 +721,7 @@ export async function resendWelcomeAction(_prev: ActionState, formData: FormData
   const user = await getUserById(id);
   if (!user) return { ok: false, error: "Artist not found." };
   const { welcomeEmail } = await import("@/lib/emails");
-  const mail = welcomeEmail(user);
+  const mail = await welcomeEmail(user);
   await sendMail({ to: user.email, subject: mail.subject, html: mail.html, text: mail.text, userId: user.id });
   revalidatePath("/admin/emails");
   return { ok: true, message: `Welcome email re-sent to ${user.email}.` };

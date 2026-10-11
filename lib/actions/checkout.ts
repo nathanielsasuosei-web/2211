@@ -78,7 +78,7 @@ export async function createOrderAction(_prev: ActionState, formData: FormData):
 
   const user = await getUserById(session.id);
   if (user) {
-    const mail = orderCreatedEmail({ order, beat, license, user });
+    const mail = await orderCreatedEmail({ order, beat, license, user });
     await sendMail({
       to: user.email,
       subject: mail.subject,
@@ -175,7 +175,7 @@ export async function startPaymentAction(_prev: ActionState, formData: FormData)
   /* ---- Bank / manual mobile money ------------------------------- */
   if (method === "bank") {
     await updateOrder(order.id, { status: "awaiting_payment", phone: parsed.data.phone || user.phone });
-    const mail = bankTransferEmail({ order, beat, user });
+    const mail = await bankTransferEmail({ order, beat, user });
     await sendMail({
       to: user.email,
       subject: mail.subject,
@@ -225,7 +225,7 @@ export async function confirmBankPaymentAction(_prev: ActionState, formData: For
   const beat = await getBeatById(order.beat_id);
   const user = await getUserById(order.user_id);
   if (beat && user) {
-    const mail = pendingBankOrderAdminEmail({ order, beat, buyer: user });
+    const mail = await pendingBankOrderAdminEmail({ order, beat, buyer: user });
     await sendMail({ to: env.adminMail, subject: mail.subject, html: mail.html, text: mail.text, orderId: order.id });
     await createMessage({
       direction: "outbound",

@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Native / Node-only packages must not be bundled by the server compiler.
   serverExternalPackages: ["pg", "nodemailer", "bcryptjs"],
+  // The dev server is previewed through the platform proxy at
+  // https://<port>-<sandbox>.e2b.app — explicitly allow that origin so
+  // internal dev endpoints (chunks, HMR websocket) are accepted, not warned.
+  allowedDevOrigins: ["*.e2b.app"],
   experimental: {
     serverActions: {
       // Beat/video uploads can be large files.

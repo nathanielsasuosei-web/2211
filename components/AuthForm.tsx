@@ -1,17 +1,18 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginAction, signupAction } from "@/lib/actions/auth";
 import { useActionToast } from "./Toast";
-import { IconBolt, IconCheck, IconUser } from "./icons";
+import { IconBolt, IconCheck, IconEye, IconEyeOff, IconUser } from "./icons";
 
 export default function AuthForm({ mode, next }: { mode: "login" | "signup"; next?: string }) {
   const action = mode === "signup" ? signupAction : loginAction;
   const [state, formAction, pending] = useActionState(action, undefined);
   useActionToast(state);
   const router = useRouter();
+  const [showPw, setShowPw] = useState(false);
 
   useEffect(() => {
     if (state?.redirect) router.push(state.redirect);
@@ -20,110 +21,132 @@ export default function AuthForm({ mode, next }: { mode: "login" | "signup"; nex
   const isSignup = mode === "signup";
 
   return (
-    <form action={formAction} className="panel pad-lg stack" style={{ gap: 16 }}>
-      <div className="stack" style={{ gap: 6 }}>
-        <span className="eyebrow">{isSignup ? "Create account" : "Sign in"}</span>
-        <h2 className="display h-sm">{isSignup ? "Join the roster" : "Back to your studio"}</h2>
-      </div>
-
-      {next && <input type="hidden" name="next" value={next} />}
-
-      <div className="stack" style={{ gap: 14 }}>
-        {isSignup && (
-          <div className="field">
-            <label htmlFor="a-name">Artist / full name</label>
-            <input id="a-name" name="name" className="input" required minLength={2} maxLength={80} placeholder="Kwame Ace" autoComplete="name" />
-          </div>
-        )}
-
-        <div className="field">
-          <label htmlFor="a-email">Email</label>
-          <input
-            id="a-email"
-            name="email"
-            type="email"
-            className="input"
-            required
-            placeholder="you@email.com"
-            autoComplete="email"
-          />
-          <span className="hint">Licences, receipts and beat files are delivered here.</span>
+    <div style={{ position: "relative" }}>
+      <div className="auth-glow" aria-hidden="true" />
+      <form action={formAction} className="panel pad-lg stack auth-card auth-form" style={{ gap: 16 }}>
+        <div className="stack anim" style={{ gap: 6, ["--i" as string]: 0 }}>
+          <span className="eyebrow">{isSignup ? "Create account" : "Sign in"}</span>
+          <h2 className="display h-sm">{isSignup ? "Join the roster" : "Back to your studio"}</h2>
         </div>
 
-        {isSignup && (
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="a-phone">Phone (mobile money)</label>
-              <input id="a-phone" name="phone" className="input" placeholder="+233 24 000 0000" autoComplete="tel" />
+        {next && <input type="hidden" name="next" value={next} />}
+
+        <div className="stack" style={{ gap: 14 }}>
+          {isSignup && (
+            <div className="field anim" style={{ ["--i" as string]: 1 }}>
+              <label htmlFor="a-name">Artist / full name</label>
+              <input id="a-name" name="name" className="input" required minLength={2} maxLength={80} placeholder="Kwame Ace" autoComplete="name" />
             </div>
-            <div className="field">
-              <label htmlFor="a-country">Country</label>
-              <input id="a-country" name="country" className="input" placeholder="Ghana" autoComplete="country-name" />
+          )}
+
+          <div className="field anim" style={{ ["--i" as string]: isSignup ? 2 : 1 }}>
+            <label htmlFor="a-email">Email</label>
+            <input
+              id="a-email"
+              name="email"
+              type="email"
+              className="input"
+              required
+              placeholder="you@email.com"
+              autoComplete="email"
+            />
+            <span className="hint">Licences, receipts and beat files are delivered here.</span>
+          </div>
+
+          {isSignup && (
+            <div className="form-grid anim" style={{ ["--i" as string]: 3 }}>
+              <div className="field">
+                <label htmlFor="a-phone">Phone (mobile money)</label>
+                <input id="a-phone" name="phone" className="input" placeholder="+233 24 000 0000" autoComplete="tel" />
+              </div>
+              <div className="field">
+                <label htmlFor="a-country">Country</label>
+                <input id="a-country" name="country" className="input" placeholder="Ghana" autoComplete="country-name" />
+              </div>
+            </div>
+          )}
+
+          <div className="field anim" style={{ ["--i" as string]: isSignup ? 4 : 2 }}>
+            <label htmlFor="a-password">Password</label>
+            <div className="input-wrap">
+              <input
+                id="a-password"
+                name="password"
+                type={showPw ? "text" : "password"}
+                className="input"
+                required
+                minLength={isSignup ? 8 : 1}
+                placeholder={isSignup ? "At least 8 characters" : "Your password"}
+                autoComplete={isSignup ? "new-password" : "current-password"}
+              />
+              <button
+                type="button"
+                className="pw-toggle"
+                onClick={() => setShowPw((v) => !v)}
+                aria-label={showPw ? "Hide password" : "Show password"}
+                tabIndex={-1}
+              >
+                {showPw ? <IconEyeOff size={17} /> : <IconEye size={17} />}
+              </button>
             </div>
           </div>
-        )}
 
-        <div className="field">
-          <label htmlFor="a-password">Password</label>
-          <input
-            id="a-password"
-            name="password"
-            type="password"
-            className="input"
-            required
-            minLength={isSignup ? 8 : 1}
-            placeholder={isSignup ? "At least 8 characters" : "Your password"}
-            autoComplete={isSignup ? "new-password" : "current-password"}
-          />
+          {isSignup && (
+            <label className="check anim" style={{ ["--i" as string]: 5 }}>
+              <input type="checkbox" name="terms" value="on" required />
+              <span>
+                I accept the <Link href="/licensing" className="red">licence terms</Link> and want product updates by email.
+              </span>
+            </label>
+          )}
         </div>
 
-        {isSignup && (
-          <label className="check">
-            <input type="checkbox" name="terms" value="on" required />
-            <span>
-              I accept the <Link href="/licensing" className="red">licence terms</Link> and want product updates by email.
+        {state?.error && <div className="form-error">{state.error}</div>}
+        {state?.ok && state.message && <div className="form-ok">{state.message}</div>}
+
+        <button
+          type="submit"
+          className="btn btn--primary btn--lg btn--block anim"
+          style={{ ["--i" as string]: isSignup ? 6 : 3 }}
+          disabled={pending}
+        >
+          {pending ? (
+            <>
+              <span className="spinner" aria-hidden="true" />
+              {isSignup ? "Creating your account…" : "Signing in…"}
+            </>
+          ) : isSignup ? (
+            <>
+              <IconBolt size={16} /> Create my account
+            </>
+          ) : (
+            <>
+              <IconUser size={16} /> Sign in
+            </>
+          )}
+        </button>
+
+        {isSignup ? (
+          <div className="stack anim" style={{ gap: 7, ["--i" as string]: 7 }}>
+            {[
+              "No card needed to browse and preview",
+              "Files delivered by email the second payment clears",
+              "Message the producer directly from your Studio",
+            ].map((line) => (
+              <span key={line} className="tiny muted row" style={{ gap: 8 }}>
+                <IconCheck size={12} className="red" /> {line}
+              </span>
+            ))}
+            <span className="tiny dim">
+              Already have an account? <Link href="/login" className="red">Sign in</Link>
             </span>
-          </label>
-        )}
-      </div>
-
-      {state?.error && <div className="form-error">{state.error}</div>}
-      {state?.ok && state.message && <div className="form-ok">{state.message}</div>}
-
-      <button type="submit" className="btn btn--primary btn--lg btn--block" disabled={pending}>
-        {pending ? (
-          "Please wait…"
-        ) : isSignup ? (
-          <>
-            <IconBolt size={16} /> Create my account
-          </>
+          </div>
         ) : (
-          <>
-            <IconUser size={16} /> Sign in
-          </>
-        )}
-      </button>
-
-      {isSignup ? (
-        <div className="stack" style={{ gap: 7 }}>
-          {[
-            "No card needed to browse and preview",
-            "Files delivered by email the second payment clears",
-            "Message the producer directly from your Studio",
-          ].map((line) => (
-            <span key={line} className="tiny muted row" style={{ gap: 8 }}>
-              <IconCheck size={12} className="red" /> {line}
-            </span>
-          ))}
-          <span className="tiny dim">
-            Already have an account? <Link href="/login" className="red">Sign in</Link>
+          <span className="tiny dim anim" style={{ ["--i" as string]: 4 }}>
+            New here? <Link href="/signup" className="red">Create a free artist account</Link>
           </span>
-        </div>
-      ) : (
-        <span className="tiny dim">
-          New here? <Link href="/signup" className="red">Create a free artist account</Link>
-        </span>
-      )}
-    </form>
+        )}
+      </form>
+    </div>
   );
 }

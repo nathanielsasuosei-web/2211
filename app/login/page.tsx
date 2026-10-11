@@ -17,21 +17,21 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <div className="section section--tight">
       <div className="wrap auth-grid">
         <div className="stack" style={{ gap: 16 }}>
-          <span className="eyebrow">Welcome back</span>
-          <h1 className="display h-lg">
+          <span className="eyebrow fade-up" style={{ animationDelay: "0.05s" }}>Welcome back</span>
+          <h1 className="display h-lg fade-up" style={{ animationDelay: "0.12s" }}>
             Sign in to <span className="red">your studio</span>
           </h1>
-          <p className="lede">
+          <p className="lede fade-up" style={{ animationDelay: "0.2s" }}>
             Access your licences, re-download purchased beats, read messages from the producer and continue any unpaid
             order.
           </p>
-          <div className="panel panel--flat pad stack" style={{ gap: 8 }}>
+          <div className="panel panel--flat pad stack fade-up" style={{ gap: 8, animationDelay: "0.28s" }}>
             <strong style={{ fontSize: 14 }}>Demo accounts</strong>
             <span className="tiny mono muted">artist@demo.com · Artist!2211</span>
             <span className="tiny mono muted">admin@2211beats.com · Admin!2211</span>
             <span className="tiny dim">Change both passwords from Admin → Settings before going live.</span>
           </div>
-          <p className="tiny dim">
+          <p className="tiny dim fade-up" style={{ animationDelay: "0.36s" }}>
             New here? <Link href="/signup" className="red">Create a free artist account</Link>
           </p>
         </div>

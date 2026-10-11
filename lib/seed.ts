@@ -295,6 +295,7 @@ export async function seedIfEmpty(): Promise<boolean> {
   const settings: Record<string, string> = {
     brand_name: env.appName,
     brand_tagline: env.appTagline,
+    accent_color: env.accentColor,
     hero_eyebrow: "Produced in Accra · Licensed worldwide",
     hero_line_1: "BEATS THAT",
     hero_line_2: "MOVE",
