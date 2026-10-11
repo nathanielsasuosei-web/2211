@@ -4,10 +4,21 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { env } from "./config";
 
-export const STORAGE_ROOT = path.join(process.cwd(), "storage");
-export const UPLOAD_ROOT = path.isAbsolute(env.uploadDir)
-  ? env.uploadDir
-  : path.join(process.cwd(), env.uploadDir);
+function resolveStorageRoot(): string {
+  // On Vercel / Lambda the filesystem is read-only except /tmp
+  if (process.env.VERCEL) return "/tmp/storage";
+  return path.join(process.cwd(), "storage");
+}
+
+function resolveUploadRoot(): string {
+  const configured = env.uploadDir;
+  if (path.isAbsolute(configured)) return configured;
+  if (process.env.VERCEL) return path.join("/tmp", configured);
+  return path.join(process.cwd(), configured);
+}
+
+export const STORAGE_ROOT = resolveStorageRoot();
+export const UPLOAD_ROOT = resolveUploadRoot();
 /** Publicly streamable media (previews, artwork, posters, videos). */
 export const PUBLIC_UPLOAD_ROOT = path.join(UPLOAD_ROOT, "public");
 /** Paid deliverables — reachable only through a signed delivery token. */
@@ -32,11 +43,29 @@ export function safeName(name: string): string {
 }
 
 export function relPath(abs: string): string {
+  const normalized = abs.split(path.sep).join("/");
+  const cwd = process.cwd().split(path.sep).join("/");
+  // If file lives inside cwd, store as relative for portability
+  if (normalized.startsWith(cwd + "/")) {
+    return normalized.slice(cwd.length + 1);
+  }
+  // If file is in /tmp (Vercel) or elsewhere outside cwd, keep absolute
+  // so absPath can resolve it directly
+  if (path.isAbsolute(abs)) {
+    return normalized;
+  }
   return path.relative(process.cwd(), abs).split(path.sep).join("/");
 }
 
 export function absPath(rel: string): string {
   const clean = rel.replace(/^\/+/, "");
+  // Absolute paths (e.g. /tmp/...) are returned as-is
+  if (path.isAbsolute(rel) || rel.startsWith("/tmp/") || rel.startsWith("tmp/")) {
+    // Handle both "/tmp/..." and "tmp/..." edge
+    if (path.isAbsolute(rel)) return rel;
+    // If it looks like an absolute path that lost leading slash, restore
+    if (clean.startsWith("tmp/")) return `/${clean}`;
+  }
   const abs = path.isAbsolute(clean) ? clean : path.join(process.cwd(), clean);
   return abs;
 }

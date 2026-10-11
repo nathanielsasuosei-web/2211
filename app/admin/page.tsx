@@ -5,7 +5,8 @@ import { moneyLabel, env } from "@/lib/config";
 import { smtpConfigured } from "@/lib/mail";
 import { mpesaEnabled } from "@/lib/payments/mpesa";
 import { paystackEnabled } from "@/lib/payments/paystack";
-import { IconBolt, IconCheck, IconClock, IconMail, IconMusic, IconSettings, IconUpload, IconVideo } from "@/components/icons";
+import { isWhatsappConfigured, whatsappEnv, getProducerWhatsappNumber } from "@/lib/whatsapp";
+import { IconBolt, IconCheck, IconClock, IconMail, IconMusic, IconPhone, IconSettings, IconUpload, IconVideo } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin dashboard" };
@@ -15,9 +16,10 @@ export default async function AdminDashboard() {
     dashboardStats(),
     recentOrders(8),
     listEmails(6),
-    listMessages({ limit: 6 }),
+    listMessages({ limit: 8 }),
     listBeats({ includeUnpublished: true, limit: 5, sort: "new" }),
   ]);
+  const whatsappTo = await getProducerWhatsappNumber().catch(() => "");
 
   const integrations = [
     {
@@ -40,7 +42,17 @@ export default async function AdminDashboard() {
       on: smtpConfigured(),
       hint: smtpConfigured() ? `${env.smtp.host}:${env.smtp.port}` : "SMTP not set — emails captured in the outbox",
     },
+    {
+      name: "WhatsApp alerts (Producer)",
+      on: isWhatsappConfigured(),
+      hint: isWhatsappConfigured()
+        ? `Active via ${whatsappEnv.provider || "auto"} → ${whatsappTo || "from settings"} — bookings ping website + WhatsApp`
+        : "Set WHATSAPP_TO + provider keys (Meta/Twilio/UltraMsg/webhook) — dev wa.me link fallback",
+    },
   ];
+
+  const bookings = messages.filter((m) => m.kind === "order" || m.kind === "booking");
+  const whatsapps = messages.filter((m) => m.kind === "whatsapp");
 
   return (
     <>
@@ -48,7 +60,7 @@ export default async function AdminDashboard() {
         <div className="stat"><b>{stats.beats}</b><span>Beats</span></div>
         <div className="stat"><b>{stats.videos}</b><span>Videos</span></div>
         <div className="stat"><b>{stats.artists}</b><span>Artists</span></div>
-        <div className="stat"><b>{stats.orders}</b><span>Orders</span></div>
+        <div className="stat"><b>{stats.orders}</b><span>Orders / bookings</span></div>
         <div className="stat"><b>{moneyLabel(stats.revenueCents, env.currency)}</b><span>Revenue</span></div>
         <div className="stat"><b>{stats.pendingOrders}</b><span>Awaiting payment</span></div>
       </div>
@@ -56,11 +68,11 @@ export default async function AdminDashboard() {
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
         <section className="panel panel--flat pad stack" style={{ gap: 14 }}>
           <div className="row row--between" style={{ gap: 10 }}>
-            <h2 className="display h-sm">Latest orders</h2>
+            <h2 className="display h-sm">Latest bookings / orders</h2>
             <Link href="/admin/orders" className="btn btn--ghost btn--sm">All orders</Link>
           </div>
           {orders.length === 0 ? (
-            <p className="tiny muted" style={{ margin: 0 }}>No orders yet.</p>
+            <p className="tiny muted" style={{ margin: 0 }}>No orders yet — bookings appear here + WhatsApp instantly.</p>
           ) : (
             <div className="stack" style={{ gap: 10 }}>
               {orders.map((o) => {
@@ -85,10 +97,14 @@ export default async function AdminDashboard() {
               })}
             </div>
           )}
+          <div className="row row--wrap" style={{ gap: 8, marginTop: 4 }}>
+            <span className="chip chip--red"><IconBolt size={12} /> {bookings.length} new bookings</span>
+            <span className="chip chip--ok"><IconPhone size={12} /> {whatsapps.length} WhatsApp msgs</span>
+          </div>
         </section>
 
         <section className="panel panel--flat pad stack" style={{ gap: 14 }}>
-          <h2 className="display h-sm">Payments &amp; delivery</h2>
+          <h2 className="display h-sm">Payments, delivery & WhatsApp</h2>
           <div className="stack" style={{ gap: 10 }}>
             {integrations.map((i) => (
               <div key={i.name} className="row row--between" style={{ gap: 10 }}>
@@ -103,7 +119,7 @@ export default async function AdminDashboard() {
             ))}
           </div>
           <Link href="/admin/settings" className="btn btn--outline btn--sm" style={{ alignSelf: "flex-start" }}>
-            <IconSettings size={14} /> Configure
+            <IconSettings size={14} /> Configure WhatsApp & payments
           </Link>
         </section>
       </div>
@@ -131,7 +147,7 @@ export default async function AdminDashboard() {
 
         <section className="panel panel--flat pad stack" style={{ gap: 14 }}>
           <div className="row row--between" style={{ gap: 10 }}>
-            <h2 className="display h-sm">Inbox &amp; outbox</h2>
+            <h2 className="display h-sm">Inbox — bookings & WhatsApp</h2>
             <span className="row" style={{ gap: 6 }}>
               <Link href="/admin/messages" className="btn btn--ghost btn--sm"><IconMail size={13} /> Messages</Link>
               <Link href="/admin/emails" className="btn btn--ghost btn--sm"><IconBolt size={13} /> Emails</Link>
@@ -141,6 +157,7 @@ export default async function AdminDashboard() {
             <div key={m.id} className="stack" style={{ gap: 2 }}>
               <span className="row" style={{ gap: 8 }}>
                 <span className={`chip ${m.direction === "inbound" ? "chip--info" : "chip--red"}`}>{m.direction}</span>
+                <span className={`chip ${m.kind === "whatsapp" ? "chip--ok" : m.kind === "order" ? "chip--red" : ""}`}>{m.kind}</span>
                 <strong style={{ fontSize: 13.5 }}>{m.subject}</strong>
               </span>
               <span className="tiny dim">

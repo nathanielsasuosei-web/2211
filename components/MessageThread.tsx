@@ -4,9 +4,21 @@ import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { markThreadReadAction, replyToMessageAction } from "@/lib/actions/admin";
 import { useActionToast } from "./Toast";
-import { IconMail } from "./icons";
+import { IconMail, IconPhone, IconBolt } from "./icons";
 import { formatDateTime } from "@/lib/view";
 import type { Message } from "@/lib/types";
+
+function kindLabel(kind: string): { label: string; icon: any; tone: string } {
+  const map: Record<string, { label: string; icon: any; tone: string }> = {
+    contact: { label: "Contact", icon: IconMail, tone: "chip--info" },
+    whatsapp: { label: "WhatsApp", icon: IconPhone, tone: "chip--ok" },
+    order: { label: "Booking", icon: IconBolt, tone: "chip--red" },
+    booking: { label: "Booking", icon: IconBolt, tone: "chip--red" },
+    admin: { label: "Producer", icon: IconMail, tone: "chip--red" },
+    system: { label: "System", icon: IconMail, tone: "" },
+  };
+  return map[kind] ?? { label: kind, icon: IconMail, tone: "" };
+}
 
 export default function MessageThread({
   messages,
@@ -42,7 +54,7 @@ export default function MessageThread({
       <div className="empty">
         <h4>No messages yet</h4>
         <p>
-          Order updates, delivery confirmations and replies from {brandName} land here — and in your email inbox.{" "}
+          Order updates, booking requests, WhatsApp messages and replies from {brandName} land here — and in your email inbox.{" "}
           <Link href="/contact" className="red">Start a conversation</Link>.
         </p>
       </div>
@@ -54,6 +66,8 @@ export default function MessageThread({
       {messages.map((m) => {
         const isOpen = open === m.id;
         const inbound = m.direction === "inbound";
+        const kindInfo = kindLabel(m.kind);
+        const KindIcon = kindInfo.icon;
         return (
           <article key={m.id} className="panel pad stack" style={{ gap: 12 }}>
             <button
@@ -64,15 +78,19 @@ export default function MessageThread({
               aria-expanded={isOpen}
             >
               <span className="stack" style={{ gap: 4, minWidth: 0 }}>
-                <span className="row" style={{ gap: 8 }}>
+                <span className="row row--wrap" style={{ gap: 8 }}>
                   <span className={`chip ${inbound ? "chip--info" : "chip--red"}`}>
                     <IconMail size={12} /> {inbound ? (isAdmin ? "Received" : "From producer") : isAdmin ? "Sent" : "You"}
+                  </span>
+                  <span className={`chip ${kindInfo.tone}`}>
+                    <KindIcon size={12} /> {kindInfo.label}
                   </span>
                   {!m.is_read && m.to_user_id && <span className="chip chip--warn">new</span>}
                   <strong style={{ fontSize: 15 }}>{m.subject}</strong>
                 </span>
                 <span className="tiny dim">
                   {formatDateTime(m.created_at)} · {m.from_name ?? m.from_email ?? brandName}
+                  {m.from_name && m.from_email && m.from_email.includes("@whatsapp") ? ` · ${m.from_email.replace("@whatsapp","")}` : ""}
                 </span>
               </span>
               <span className="tiny dim">{isOpen ? "▲" : "▼"}</span>
@@ -86,8 +104,20 @@ export default function MessageThread({
 
                 {m.order_id && (
                   <span className="tiny dim">
-                    Related to order <span className="mono">{m.order_id}</span>
+                    Related to order <span className="mono">{m.order_id}</span> · <Link href={`/admin/orders?ref=${m.order_id}`} className="red">View order</Link>
                   </span>
+                )}
+
+                {m.kind === "whatsapp" && m.from_email && (
+                  <a
+                    href={`https://wa.me/${m.from_email.replace(/[^0-9]/g, "")}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="btn btn--outline btn--sm"
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    <IconPhone size={14} /> Reply on WhatsApp
+                  </a>
                 )}
 
                 <form
@@ -102,7 +132,7 @@ export default function MessageThread({
                     name="body"
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
-                    placeholder={`Write a reply — it is emailed to ${inbound ? m.from_email ?? "the sender" : brandName} and saved here.`}
+                    placeholder={`Write a reply — it is emailed to ${inbound ? m.from_email ?? "the sender" : brandName} and saved here. For WhatsApp, also send manually via wa.me.`}
                     required
                     minLength={2}
                   />

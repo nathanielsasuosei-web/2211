@@ -137,7 +137,7 @@ export interface Message {
   id: string;
   thread_id: string | null;
   direction: "inbound" | "outbound";
-  kind: "contact" | "admin" | "system" | "order";
+  kind: "contact" | "admin" | "system" | "order" | "whatsapp" | "booking";
   from_user_id: string | null;
   to_user_id: string | null;
   from_name: string | null;

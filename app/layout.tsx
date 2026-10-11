@@ -14,11 +14,24 @@ import { normalizeAccent, themeCssVars, themeInitScript } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
+function safeAppUrl(): URL | undefined {
+  try {
+    return new URL(env.appUrl);
+  } catch {
+    try {
+      return new URL("http://localhost:3000");
+    } catch {
+      return undefined;
+    }
+  }
+}
+
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSiteSettings().catch(() => null);
   const name = settings?.brandName ?? env.appName;
+  const base = safeAppUrl();
   return {
-    metadataBase: new URL(env.appUrl),
+    ...(base ? { metadataBase: base } : {}),
     title: {
       default: `${name} — ${settings?.tagline ?? env.appTagline}`,
       template: `%s · ${name}`,
@@ -59,9 +72,55 @@ export async function generateViewport(): Promise<Viewport> {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  await ensureBootstrapped();
-  const [settings, session] = await Promise.all([getSiteSettings(), getSession()]);
-  const unread = session ? await unreadMessageCount(session.id) : 0;
+  // Bootstrap should never crash the layout
+  try {
+    await ensureBootstrapped();
+  } catch (err) {
+    console.error("[layout] bootstrap failed:", err);
+  }
+
+  let settings;
+  try {
+    settings = await getSiteSettings();
+  } catch (err) {
+    console.error("[layout] getSiteSettings failed:", err);
+    settings = {
+      brandName: env.appName,
+      tagline: env.appTagline,
+      accentColor: env.accentColor,
+      heroEyebrow: "",
+      heroLine1: "BEATS THAT",
+      heroLine2: "MOVE",
+      heroLine3: "CROWDS",
+      heroSub: "",
+      producerBio: "",
+      contactEmail: env.supportMail,
+      contactPhone: env.adminPhone,
+      studioLocation: "",
+      instagram: "",
+      youtube: "",
+      tiktok: "",
+      whatsapp: "",
+      raw: {},
+    } as any;
+  }
+
+  let session = null;
+  try {
+    session = await getSession();
+  } catch (err) {
+    console.error("[layout] getSession failed:", err);
+  }
+
+  let unread = 0;
+  if (session) {
+    try {
+      unread = await unreadMessageCount(session.id);
+    } catch (err) {
+      console.error("[layout] unreadMessageCount failed:", err);
+    }
+  }
+
   const accent = normalizeAccent(settings.accentColor);
 
   return (

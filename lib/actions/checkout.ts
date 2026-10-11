@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ensureBootstrapped } from "@/lib/bootstrap";
-import { env } from "@/lib/config";
+import { env, moneyLabel } from "@/lib/config";
 import { getSession } from "@/lib/auth";
 import {
   createMessage,
@@ -12,15 +12,30 @@ import {
   getBeatById,
   getOrderByRef,
   getUserById,
+  getUserByEmail,
   listLicenses,
   updateOrder,
 } from "@/lib/repo";
+import { all } from "@/lib/db";
 import { sendMail } from "@/lib/mail";
 import { bankTransferEmail, orderCreatedEmail, pendingBankOrderAdminEmail } from "@/lib/emails";
 import { fulfillOrder, failOrder } from "@/lib/fulfillment";
 import { initializeTransaction, verifyTransaction } from "@/lib/payments/paystack";
 import { normaliseMpesaPhone, sendStkPush, queryStkPush } from "@/lib/payments/mpesa";
+import { notifyProducerOrder } from "@/lib/whatsapp";
 import type { ActionState } from "./auth";
+
+async function getAdminUserId(): Promise<string | null> {
+  try {
+    const admin = await getUserByEmail(env.adminEmail);
+    if (admin) return admin.id;
+    // fallback: first admin
+    const rows = await all<{ id: string }>("SELECT id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1");
+    return rows[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* Create order                                                        */
@@ -87,6 +102,39 @@ export async function createOrderAction(_prev: ActionState, formData: FormData):
       userId: user.id,
       orderId: order.id,
     });
+
+    // ── Producer notification on website + WhatsApp ──
+    try {
+      const adminId = await getAdminUserId();
+      await createMessage({
+        direction: "inbound",
+        kind: "order",
+        from_user_id: user.id,
+        to_user_id: adminId,
+        from_name: user.name,
+        from_email: user.email,
+        subject: `New booking: ${beat.title} - ${license?.name ?? "Standard"} (${order.reference})`,
+        body: `New booking order received:\n\nBeat: ${beat.title} (${beat.genre})\nLicence: ${license?.name ?? "Standard"}\nAmount: ${moneyLabel(order.amount_cents, order.currency)}\nBuyer: ${user.name} <${user.email}>\nPhone: ${user.phone ?? "—"}\nReference: ${order.reference}\nStatus: ${order.status}\n\nView in admin: ${env.appUrl}/admin/orders?ref=${order.reference}`,
+        order_id: order.id,
+        beat_id: beat.id,
+      });
+
+      await notifyProducerOrder({
+        reference: order.reference,
+        beatTitle: beat.title,
+        beatGenre: beat.genre,
+        licenseName: license?.name ?? "Standard",
+        amount: moneyLabel(order.amount_cents, order.currency),
+        currency: order.currency,
+        method: order.method,
+        buyerName: user.name,
+        buyerEmail: user.email,
+        buyerPhone: user.phone,
+        status: order.status,
+      }, "new");
+    } catch (err) {
+      console.error("[checkout] producer notify failed (new order):", err);
+    }
   }
 
   redirect(`/checkout/${order.reference}`);
@@ -227,6 +275,8 @@ export async function confirmBankPaymentAction(_prev: ActionState, formData: For
   if (beat && user) {
     const mail = await pendingBankOrderAdminEmail({ order, beat, buyer: user });
     await sendMail({ to: env.adminMail, subject: mail.subject, html: mail.html, text: mail.text, orderId: order.id });
+
+    // Message to buyer
     await createMessage({
       direction: "outbound",
       kind: "order",
@@ -238,9 +288,45 @@ export async function confirmBankPaymentAction(_prev: ActionState, formData: For
       order_id: order.id,
       beat_id: beat.id,
     });
+
+    // ── Producer inbox + WhatsApp for bank submission ──
+    try {
+      const adminId = await getAdminUserId();
+      await createMessage({
+        direction: "inbound",
+        kind: "order",
+        from_user_id: user.id,
+        to_user_id: adminId,
+        from_name: user.name,
+        from_email: user.email,
+        subject: `Bank payment submitted: ${beat.title} (${order.reference}) - ${bankReference}`,
+        body: `Bank/MoMo payment submitted:\n\nBeat: ${beat.title}\nAmount: ${moneyLabel(order.amount_cents, order.currency)}\nBuyer: ${user.name} <${user.email}>\nPhone: ${user.phone ?? "—"}\nBank ref: ${bankReference}\nNote: ${note || "—"}\nOrder ref: ${order.reference}\n\nVerify and approve in admin: ${env.appUrl}/admin/orders?ref=${order.reference}`,
+        order_id: order.id,
+        beat_id: beat.id,
+      });
+
+      await notifyProducerOrder({
+        reference: order.reference,
+        beatTitle: beat.title,
+        beatGenre: beat.genre,
+        licenseName: undefined,
+        amount: moneyLabel(order.amount_cents, order.currency),
+        currency: order.currency,
+        method: "bank",
+        buyerName: user.name,
+        buyerEmail: user.email,
+        buyerPhone: user.phone,
+        bankReference,
+        status: "in_review",
+      }, "bank_submitted");
+    } catch (err) {
+      console.error("[checkout] producer notify failed (bank):", err);
+    }
   }
 
   revalidatePath("/studio");
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin/messages");
   return {
     ok: true,
     message: "Reference submitted. We are verifying it now — you will get an email with your files as soon as it clears.",

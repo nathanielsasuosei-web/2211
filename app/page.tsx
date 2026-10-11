@@ -11,19 +11,58 @@ import { IconBolt, IconCheck, IconDownload, IconMail, IconPhone, IconShield } fr
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  await ensureBootstrapped();
-  const [settings, stats, featured, fresh, genres, videos] = await Promise.all([
-    getSiteSettings(),
-    dashboardStats(),
-    listBeats({ featuredOnly: true, limit: 4 }),
-    listBeats({ sort: "new", limit: 8 }),
-    listGenres(),
-    listVideos(3),
-  ]);
+  try {
+    await ensureBootstrapped();
+  } catch (err) {
+    console.error("[home] bootstrap failed:", err);
+  }
+
+  let settings, stats, featured, fresh, genres, videos;
+  try {
+    [settings, stats, featured, fresh, genres, videos] = await Promise.all([
+      getSiteSettings(),
+      dashboardStats(),
+      listBeats({ featuredOnly: true, limit: 4 }),
+      listBeats({ sort: "new", limit: 8 }),
+      listGenres(),
+      listVideos(3),
+    ]);
+  } catch (err) {
+    console.error("[home] data fetch failed, using empty defaults:", err);
+    settings = await getSiteSettings().catch(() => ({
+      brandName: "2211 BEATS",
+      tagline: "Premium beats",
+      accentColor: "#e10600",
+      heroEyebrow: "Produced in Accra · Licensed worldwide",
+      heroLine1: "BEATS THAT",
+      heroLine2: "MOVE",
+      heroLine3: "CROWDS",
+      heroSub: "Studio-grade instrumentals",
+      producerBio: "",
+      contactEmail: "",
+      contactPhone: "",
+      studioLocation: "",
+      instagram: "",
+      youtube: "",
+      tiktok: "",
+      whatsapp: "",
+      raw: {},
+    } as any));
+    stats = { beats: 0, artists: 0, orders: 0, revenueCents: 0, pendingOrders: 0, videos: 0, emails: 0 };
+    featured = [];
+    fresh = [];
+    genres = [];
+    videos = [];
+  }
 
   const shown = featured.length >= 4 ? featured : [...featured, ...fresh].slice(0, 8);
   const queue = shown.map(toTrack);
-  const videoBeats = await Promise.all(videos.map((v) => (v.beat_id ? getBeatById(v.beat_id) : Promise.resolve(null))));
+  let videoBeats: any[] = [];
+  try {
+    videoBeats = await Promise.all(videos.map((v) => (v.beat_id ? getBeatById(v.beat_id) : Promise.resolve(null))));
+  } catch (err) {
+    console.error("[home] video beats fetch failed:", err);
+  }
 
   return (
     <>
