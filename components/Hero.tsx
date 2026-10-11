@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import HeroCanvas from "./HeroCanvas";
-import { IconBolt, IconPlay, IconShield, IconUpload } from "./icons";
+import Hero3D, { HERO_SHOT_LABELS } from "./Hero3D";
+import AccentBar from "./AccentBar";
+import { IconBolt, IconMusic, IconPlay, IconShield, IconUpload } from "./icons";
 import type { PublicSettings } from "@/lib/site-data";
 
 type Stat = { value: number; suffix?: string; label: string };
@@ -31,10 +32,10 @@ function useCountUp(target: number, duration = 1400) {
   return value;
 }
 
-function StatBlock({ stat }: { stat: Stat }) {
+function StatBlock({ stat, delay }: { stat: Stat; delay: number }) {
   const value = useCountUp(stat.value);
   return (
-    <div className="stat fade-up">
+    <div className="stat fade-up" style={{ animationDelay: `${delay}s` }}>
       <b>
         {value.toLocaleString()}
         {stat.suffix ?? ""}
@@ -53,34 +54,64 @@ export default function Hero({
   stats: { beats: number; artists: number; plays: number; delivered: number };
   genres: string[];
 }) {
-  const [pointer, setPointer] = useState({ x: 0, y: 0 });
-  const ref = useRef<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const copyRef = useRef<HTMLDivElement | null>(null);
+  const [shot, setShot] = useState(0);
+  const [shotLabel, setShotLabel] = useState(HERO_SHOT_LABELS[0]);
 
+  /* Pointer parallax — written straight to the transform in a rAF loop so the
+     60fps hero never re-renders React while the mouse moves. */
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const section = sectionRef.current;
+    const copy = copyRef.current;
+    if (!section || !copy) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let tx = 0, ty = 0, x = 0, y = 0, raf = 0;
     const onMove = (e: PointerEvent) => {
-      const rect = el.getBoundingClientRect();
-      setPointer({
-        x: (e.clientX - rect.left) / rect.width - 0.5,
-        y: (e.clientY - rect.top) / rect.height - 0.5,
-      });
+      const r = section.getBoundingClientRect();
+      tx = (e.clientX - r.left) / Math.max(1, r.width) - 0.5;
+      ty = (e.clientY - r.top) / Math.max(1, r.height) - 0.5;
     };
-    el.addEventListener("pointermove", onMove);
-    return () => el.removeEventListener("pointermove", onMove);
+    const onLeave = () => { tx = 0; ty = 0; };
+    const loop = () => {
+      x += (tx - x) * 0.07;
+      y += (ty - y) * 0.07;
+      copy.style.transform = `translate3d(${(x * -16).toFixed(2)}px, ${(y * -11).toFixed(2)}px, 0)`;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    section.addEventListener("pointermove", onMove);
+    section.addEventListener("pointerleave", onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      section.removeEventListener("pointermove", onMove);
+      section.removeEventListener("pointerleave", onLeave);
+    };
   }, []);
 
+  const onShot = (index: number, label: string) => {
+    setShot(index);
+    setShotLabel(label);
+  };
+
   return (
-    <section className="hero" ref={ref}>
-      <HeroCanvas className="hero__canvas" idle={0.32} />
+    <section className="hero hero--3d" ref={sectionRef}>
+      <Hero3D className="hero__canvas" idle={0.3} onShot={onShot} />
       <div className="hero__veil" />
       <div className="hero__grain" />
 
+      {/* animatic slate — which "shot" of the hero loop we're on */}
+      <div className="hero__slate" aria-hidden="true">
+        <span className="hero__slate-rec" />
+        <span className="mono">
+          SC {String(shot + 1).padStart(2, "0")}/{String(HERO_SHOT_LABELS.length).padStart(2, "0")}
+        </span>
+        <span className="hero__slate-label">{shotLabel}</span>
+      </div>
+
       <div className="wrap hero__inner">
-        <div
-          className="stack"
-          style={{ gap: 26, maxWidth: 900, transform: `translate3d(${pointer.x * -14}px, ${pointer.y * -10}px, 0)` }}
-        >
+        <div className="stack hero__copy" ref={copyRef} style={{ gap: 26, maxWidth: 900 }}>
           <span className="eyebrow fade-up" style={{ animationDelay: "0.05s" }}>
             {settings.heroEyebrow}
           </span>
@@ -106,24 +137,30 @@ export default function Hero({
               <IconBolt size={17} />
               Browse the beat store
             </Link>
-            <Link href="/signup" className="btn btn--outline btn--lg">
-              <IconUpload size={16} />
-              Create artist account
+            <Link href="#beat-list" className="btn btn--outline btn--lg">
+              <IconMusic size={15} />
+              See the beat list
             </Link>
             <Link href="/watch" className="btn btn--ghost btn--lg">
               <IconPlay size={15} />
               Watch sessions
             </Link>
+            <Link href="/signup" className="btn btn--ghost btn--lg">
+              <IconUpload size={16} />
+              Create artist account
+            </Link>
           </div>
 
-          <div className="hero__stats fade-up" style={{ animationDelay: "0.62s", maxWidth: 760 }}>
-            <StatBlock stat={{ value: stats.beats, label: "Beats in the store" }} />
-            <StatBlock stat={{ value: stats.artists, label: "Artists licensed" }} />
-            <StatBlock stat={{ value: stats.plays, suffix: "+", label: "Previews played" }} />
-            <StatBlock stat={{ value: stats.delivered, label: "Files delivered" }} />
+          <AccentBar brandAccent={settings.accentColor} />
+
+          <div className="hero__stats fade-up" style={{ animationDelay: "0.76s", maxWidth: 760 }}>
+            <StatBlock stat={{ value: stats.beats, label: "Beats in the store" }} delay={0.76} />
+            <StatBlock stat={{ value: stats.artists, label: "Artists licensed" }} delay={0.84} />
+            <StatBlock stat={{ value: stats.plays, suffix: "+", label: "Previews played" }} delay={0.92} />
+            <StatBlock stat={{ value: stats.delivered, label: "Files delivered" }} delay={1} />
           </div>
 
-          <div className="row row--wrap fade-up" style={{ gap: 8, animationDelay: "0.72s" }}>
+          <div className="row row--wrap fade-up" style={{ gap: 8, animationDelay: "0.86s" }}>
             <span className="chip chip--ok">
               <IconShield size={13} /> Instant email delivery
             </span>

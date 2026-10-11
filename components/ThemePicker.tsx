@@ -7,6 +7,7 @@ import {
   getStoredAccent,
   normalizeAccent,
   storeAccent,
+  tweenAccent,
 } from "@/lib/theme";
 import { IconCheck, IconClose, IconPalette } from "./icons";
 
@@ -50,15 +51,18 @@ export default function ThemePicker({ brandAccent }: { brandAccent: string }) {
     };
   }, [open]);
 
-  const pick = (hex: string) => {
-    const n = applyAccent(hex);
+  /** Preset clicks glide (tweenAccent); dragging the picker follows the pointer 1:1. */
+  const pick = (hex: string, animate = true) => {
+    const n = normalizeAccent(hex);
+    if (animate) tweenAccent(n);
+    else applyAccent(n);
     setActive(n);
     setCustom(n);
     storeAccent(n);
   };
 
   const reset = () => {
-    applyAccent(brand);
+    tweenAccent(brand);
     setActive(brand);
     setCustom(brand);
     storeAccent(null);
@@ -116,7 +120,7 @@ export default function ThemePicker({ brandAccent }: { brandAccent: string }) {
               value={custom}
               onChange={(e) => {
                 setCustom(e.target.value);
-                pick(e.target.value);
+                pick(e.target.value, false);
               }}
               aria-label="Custom colour"
             />

@@ -5,8 +5,25 @@ accounts, pay with **M-Pesa (Daraja STK push)**, **Paystack** (card / mobile mon
 **bank transfer**, and receive their files **by email** the moment payment clears — with every message
 mirrored into the artist's Studio inbox.
 
-Dark UI, red accent (`#e10600`), animated canvas hero, persistent bottom player, keyboard-friendly
-beat store, and a producer console for uploads, orders, artists, messaging and settings.
+Dark UI, red accent (`#e10600`), a **smooth 3D animatic hero**, an **adjustable accent colour**, the
+full beat list on the homepage, a persistent bottom player and a producer console for uploads, orders,
+artists, messaging and settings.
+
+- **Hero** — `components/Hero3D.tsx` + `lib/hero-scene.ts`: a dependency-free software 3D renderer
+  (perspective camera, painter's-algorithm depth sort, Lambert shading) drawing an audio-reactive ring
+  of equaliser towers around a faceted gem core on a receding perspective grid. The camera plays a
+  looping *storyboard animatic* — wide establish → low orbit pass → crane over the desk → push to
+  core — sine-eased between keyframes, damped pointer parallax, delta-time motion, DPR/pixel budget
+  capped, paused off-screen and quiet under `prefers-reduced-motion`. The little `SC 02/04 · LOW ORBIT
+  PASS` slate in the hero corner is the current shot. Render still frames without a browser via
+  `node scripts/hero-preview.mjs` (needs `npm i -D @napi-rs/canvas`).
+- **Adjustable colour** — one hex drives everything (buttons, glows, the 3D scene, navbar hairline,
+  emails). Pick it in the hero (hue / vividness / tone sliders + presets + native picker) or in the
+  navbar palette; presets *tween* over ~0.5s instead of snapping. Saved per device in localStorage and
+  applied before first paint. The store-wide default lives in **Admin → Settings → Accent colour**
+  (`ACCENT_COLOR`), and "Brand" in the hero jumps back to it.
+- **Beat list** — the homepage lists every published beat (featured first) with a grid ↔ numbered
+  tracklist toggle and a *Play all* button that queues the whole list into the player.
 
 > **Brand name:** the store currently ships as **"2211 BEATS"** (a placeholder). Rename it in
 > `.env.local` (`APP_NAME`) or in the admin console under **Settings → Storefront copy** — the hero,
@@ -42,6 +59,7 @@ npm start            # serve the production build
 npm run typecheck    # tsc --noEmit
 npm run db:reset     # wipe database + uploads, then re-seed on next boot
 node scripts/mint-session.mjs admin@2211beats.com   # dev helper: print a session JWT
+node scripts/hero-preview.mjs                       # dev helper: PNGs of the hero's 3D shots
 ```
 
 ---
@@ -106,8 +124,9 @@ For a clean shop: `Admin → Settings → Reset demo data` (or `npm run db:reset
   bank / SMTP / database, webhook URLs, test email, demo-data reset.
 
 ### Storefront
-- `/` animated hero (canvas waveform + equaliser + kinetic type), featured beats, genre shortcuts,
-  how-it-works steps, watch strip, licence teaser.
+- `/` 3D animatic hero (equaliser towers, gem core, perspective grid, kinetic type) with the inline
+  accent control, the full beat list (grid/list, play all), genre shortcuts, how-it-works steps,
+  watch strip, licence teaser.
 - `/beats` filterable store (search, genre, mood, key, BPM range, price, sort) with **grid and row
   views**; `/beats/[slug]` detail page with waveform player, licence picker, credits and related beats.
 - `/watch` video gallery with lightbox; `/licensing` full terms; `/about` producer bio; `/contact`

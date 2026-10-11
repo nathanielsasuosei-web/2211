@@ -12,3 +12,6 @@ storage/
 public/uploads/
 npm-debug.log*
 .DS_Store
+
+# hero-preview output (scripts/hero-preview.mjs)
+.hero-preview/

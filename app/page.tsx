@@ -4,7 +4,7 @@ import { getSiteSettings } from "@/lib/site";
 import { dashboardStats, getBeatById, listBeats, listGenres, listVideos } from "@/lib/repo";
 import { toClientVideo, toTrack } from "@/lib/view";
 import Hero from "@/components/Hero";
-import BeatCard from "@/components/BeatCard";
+import BeatListing from "@/components/BeatListing";
 import VideoCard from "@/components/VideoCard";
 import { IconBolt, IconCheck, IconDownload, IconMail, IconPhone, IconShield } from "@/components/icons";
 
@@ -22,8 +22,8 @@ export default async function HomePage() {
     [settings, stats, featured, fresh, genres, videos] = await Promise.all([
       getSiteSettings(),
       dashboardStats(),
-      listBeats({ featuredOnly: true, limit: 4 }),
-      listBeats({ sort: "new", limit: 8 }),
+      listBeats({ featuredOnly: true, limit: 12 }),
+      listBeats({ sort: "new", limit: 30 }),
       listGenres(),
       listVideos(3),
     ]);
@@ -55,7 +55,14 @@ export default async function HomePage() {
     videos = [];
   }
 
-  const shown = featured.length >= 4 ? featured : [...featured, ...fresh].slice(0, 8);
+  // Everything published, listed on the homepage: featured first, then the
+  // rest newest-first, de-duplicated by id.
+  const seen = new Set<string>();
+  const shown = [...featured, ...fresh].filter((b) => {
+    if (seen.has(b.id)) return false;
+    seen.add(b.id);
+    return true;
+  });
   const queue = shown.map(toTrack);
   let videoBeats: any[] = [];
   try {
@@ -77,18 +84,19 @@ export default async function HomePage() {
         genres={genres.slice(0, 8)}
       />
 
-      {/* ── Featured beats ─────────────────────────────────────────── */}
-      <section className="section" id="featured">
+      {/* ── Beat list (everything published) ───────────────────────── */}
+      <section className="section" id="beat-list">
         <div className="wrap">
           <div className="row row--between row--wrap" style={{ gap: 18, marginBottom: 26 }}>
             <div className="stack" style={{ gap: 10 }}>
               <span className="eyebrow">Fresh from the studio</span>
               <h2 className="display h-lg">
-                Beats ready to <span className="red">license</span>
+                The beat <span className="red">list</span>
               </h2>
               <p className="lede">
-                Every instrumental is mixed, mastered and cleared for release. Preview free — the moment your payment
-                clears, the untagged files land in your inbox and your Vault.
+                Every instrumental in the store, listed — {shown.length} shown of {stats.beats} published. Mixed,
+                mastered and cleared for release. Preview free — the moment your payment clears, the untagged files
+                land in your inbox and your Vault.
               </p>
             </div>
             <Link href="/beats" className="btn btn--outline">
@@ -97,11 +105,7 @@ export default async function HomePage() {
           </div>
 
           {shown.length ? (
-            <div className="beat-grid">
-              {shown.map((beat) => (
-                <BeatCard key={beat.id} track={toTrack(beat)} queue={queue} />
-              ))}
-            </div>
+            <BeatListing tracks={queue} total={stats.beats} initial={8} />
           ) : (
             <div className="empty">
               <h4>No beats published yet</h4>
