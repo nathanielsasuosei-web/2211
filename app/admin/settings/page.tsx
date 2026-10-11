@@ -3,15 +3,20 @@ import { env } from "@/lib/config";
 import { smtpConfigured } from "@/lib/mail";
 import { mpesaEnabled } from "@/lib/payments/mpesa";
 import { paystackEnabled } from "@/lib/payments/paystack";
+import { isWhatsappConfigured, whatsappEnv, getProducerWhatsappNumber } from "@/lib/whatsapp";
 import SettingsForm from "@/components/SettingsForm";
 import ResetDemoForm from "@/components/ResetDemoForm";
-import { IconCheck, IconClock, IconSettings } from "@/components/icons";
+import TestEmailForm from "@/components/TestEmailForm";
+import TestWhatsappForm from "@/components/TestWhatsappForm";
+import { IconCheck, IconClock, IconSettings, IconPhone, IconMail } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin · Settings" };
 
 export default async function AdminSettingsPage() {
   const settings = await getAllSettings();
+  const whatsappTo = await getProducerWhatsappNumber();
+  const whatsappOn = isWhatsappConfigured();
 
   const integrations = [
     {
@@ -45,6 +50,14 @@ export default async function AdminSettingsPage() {
       docs: "",
     },
     {
+      name: "WhatsApp (Producer alerts)",
+      on: whatsappOn,
+      detail: whatsappOn
+        ? `Active via ${whatsappEnv.provider || "auto"} → ${whatsappTo || "no number set"}. Orders, bank transfers and contact messages notify the producer on website + WhatsApp.`
+        : `Set WHATSAPP_TO or site WhatsApp number, and one provider: META (WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID), TWILIO (TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_WHATSAPP_FROM), ULTRAMSG (ULTRAMSG_INSTANCE_ID + ULTRAMSG_TOKEN), or generic WHATSAPP_WEBHOOK_URL. Without keys, a wa.me link is logged.`,
+      docs: "https://developers.facebook.com/docs/whatsapp/cloud-api",
+    },
+    {
       name: "Database",
       on: true,
       detail: env.databaseUrl.startsWith("postgres")
@@ -65,7 +78,7 @@ export default async function AdminSettingsPage() {
       </section>
 
       <section className="stack" style={{ gap: 12 }}>
-        <h3 className="display h-sm">Payments &amp; delivery</h3>
+        <h3 className="display h-sm">Payments, delivery & notifications</h3>
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
           {integrations.map((i) => (
             <article key={i.name} className="panel panel--flat pad stack" style={{ gap: 8 }}>
@@ -85,13 +98,38 @@ export default async function AdminSettingsPage() {
           ))}
         </div>
 
-        <div className="panel panel--flat pad stack" style={{ gap: 8 }}>
+        <div className="panel panel--flat pad stack" style={{ gap: 12 }}>
           <strong style={{ fontSize: 14.5 }}>Webhook URLs</strong>
           <p className="tiny muted" style={{ margin: 0, lineHeight: 1.6 }}>
             Point your providers here so payments confirm automatically:
           </p>
           <span className="tiny mono muted">Paystack callback → {env.appUrl}/api/payments/paystack/webhook</span>
           <span className="tiny mono muted">Daraja STK callback → {env.appUrl}/api/payments/mpesa/callback</span>
+          <span className="tiny mono muted">WhatsApp webhook (optional) → {env.appUrl}/api/whatsapp/webhook (if you build one)</span>
+        </div>
+
+        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14 }}>
+          <div className="panel panel--flat pad stack" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 8 }}>
+              <IconMail size={14} /> <strong style={{ fontSize: 14 }}>Test email</strong>
+            </div>
+            <p className="tiny muted" style={{ margin: 0 }}>Verify SMTP is working. Sends from {env.mailFrom}.</p>
+            <TestEmailForm />
+          </div>
+          <div className="panel panel--flat pad stack" style={{ gap: 10, borderColor: "rgba(var(--accent-rgb), 0.35)" }}>
+            <div className="row" style={{ gap: 8 }}>
+              <IconPhone size={14} /> <strong style={{ fontSize: 14 }}>Test WhatsApp to producer</strong>
+            </div>
+            <p className="tiny muted" style={{ margin: 0, lineHeight: 1.5 }}>
+              Sends a WhatsApp to the producer number ({whatsappTo || "not set – set in Settings → WhatsApp number or WHATSAPP_TO env"}). 
+              Supports Meta Cloud API, Twilio, UltraMsg, or generic webhook. Without keys, a wa.me link is generated.
+            </p>
+            <TestWhatsappForm defaultTo={whatsappTo} />
+            <div className="stack" style={{ gap: 4, marginTop: 6 }}>
+              <span className="tiny dim">Env: WHATSAPP_ENABLED={String(whatsappEnv.enabled)} PROVIDER={whatsappEnv.provider || "auto"} TO={whatsappEnv.to || "(from settings)"}</span>
+              <span className="tiny dim">Meta: {whatsappEnv.metaPhoneId ? "phoneId set" : "no phoneId"} / Twilio: {whatsappEnv.twilioSid ? "SID set" : "no SID"} / Webhook: {whatsappEnv.webhookUrl ? "set" : "not set"}</span>
+            </div>
+          </div>
         </div>
       </section>
 

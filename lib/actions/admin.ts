@@ -620,7 +620,7 @@ export async function contactAction(_prev: ActionState, formData: FormData): Pro
     from_name: data.name,
     from_email: data.email,
     subject: data.subject,
-    body: data.message,
+    body: data.message + (data.phone ? "\n\nPhone: " + data.phone : ""),
   });
 
   const notify = await contactNotificationEmail({
@@ -634,6 +634,20 @@ export async function contactAction(_prev: ActionState, formData: FormData): Pro
 
   const auto = await contactAutoReplyEmail({ name: data.name, subject: data.subject });
   await sendMail({ to: data.email, subject: auto.subject, html: auto.html, text: auto.text });
+
+  // ── WhatsApp to producer for contact/booking enquiries ──
+  try {
+    const { notifyProducerContact } = await import("@/lib/whatsapp");
+    await notifyProducerContact({
+      name: data.name,
+      email: data.email,
+      phone: data.phone || undefined,
+      subject: data.subject,
+      message: data.message,
+    });
+  } catch (err) {
+    console.error("[contact] whatsapp notify failed:", err);
+  }
 
   revalidatePath("/admin/messages");
   return { ok: true, message: "Message sent — the producer replies to every enquiry, usually within 24 hours." };
@@ -709,6 +723,52 @@ export async function sendTestEmailAction(_prev: ActionState, formData: FormData
   return result.status === "failed"
     ? { ok: false, error: `SMTP error: ${result.error}` }
     : { ok: true, message: `Test email ${result.status === "sent" ? "sent" : "captured in the outbox"} → ${to}` };
+}
+
+export async function sendTestWhatsappAction(_prev: ActionState, formData: FormData): Promise<ActionState & { waLink?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { ok: false, error: "Admin only." };
+  }
+  const to = String(formData.get("to") ?? "").trim();
+  const message = String(formData.get("message") ?? "").trim() || "Hello! This is a test WhatsApp from your beat store. Booking notifications are working ✅";
+
+  const { sendWhatsapp, getProducerWhatsappNumber, buildWaMeLink, isWhatsappConfigured, whatsappEnv } = await import("@/lib/whatsapp");
+
+  let recipient = to;
+  if (!recipient) {
+    recipient = await getProducerWhatsappNumber();
+  }
+  if (!recipient) {
+    return { ok: false, error: "Enter a phone number or set WhatsApp number in Settings (Admin → Settings → WhatsApp number) or WHATSAPP_TO env." };
+  }
+
+  const waLink = buildWaMeLink(recipient, message);
+
+  if (!isWhatsappConfigured()) {
+    return {
+      ok: true,
+      message: `WhatsApp not fully configured (no provider keys). Use this wa.me link to test manually: ${waLink}`,
+      waLink,
+    };
+  }
+
+  const result = await sendWhatsapp(recipient, message);
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      error: `WhatsApp ${result.provider} error: ${result.error}. You can still use wa.me: ${waLink}`,
+      waLink,
+    };
+  }
+
+  return {
+    ok: true,
+    message: `WhatsApp sent via ${result.provider} to ${recipient} (id: ${result.id || "—"}). ${whatsappEnv.provider === "none" ? "Dev mode: check server logs." : ""}`,
+    waLink,
+  };
 }
 
 export async function resendWelcomeAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

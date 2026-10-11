@@ -45,7 +45,8 @@ export default async function AdminOrdersPage({
       <div className="row row--between row--wrap" style={{ gap: 12 }}>
         <div className="stack" style={{ gap: 6 }}>
           <span className="eyebrow"><IconCard size={12} /> Revenue</span>
-          <h2 className="display h-md">Orders &amp; payments</h2>
+          <h2 className="display h-md">Orders & payments — website + WhatsApp alerts</h2>
+          <p className="tiny muted" style={{ margin: 0 }}>Producer gets every booking in /admin/messages and instantly on WhatsApp.</p>
         </div>
         <div className="row row--wrap" style={{ gap: 8 }}>
           <span className="chip">{totals.count} orders</span>
@@ -73,7 +74,7 @@ export default async function AdminOrdersPage({
       {decorated.length === 0 ? (
         <div className="empty">
           <h4>No orders match this filter</h4>
-          <p>Orders appear here the moment an artist starts checkout.</p>
+          <p>Orders appear here the moment an artist starts checkout. WhatsApp alerts fire automatically.</p>
         </div>
       ) : (
         <div className="table-wrap">
@@ -103,6 +104,7 @@ export default async function AdminOrdersPage({
                           {o.buyer?.name ?? "—"}
                         </Link>
                         <span className="tiny dim mono">{o.buyer?.email}</span>
+                        {o.buyer?.phone && <span className="tiny dim">{o.buyer.phone}</span>}
                       </div>
                     </td>
                     <td>
@@ -120,6 +122,10 @@ export default async function AdminOrdersPage({
                         reference={o.reference}
                         status={o.status}
                         amount={moneyLabel(o.amount_cents, o.currency)}
+                        buyerName={o.buyer?.name}
+                        buyerEmail={o.buyer?.email}
+                        buyerPhone={o.buyer?.phone ?? o.phone}
+                        beatTitle={o.beat?.title}
                       />
                     </td>
                   </tr>

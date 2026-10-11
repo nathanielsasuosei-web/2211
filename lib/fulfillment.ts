@@ -13,15 +13,18 @@ import {
   getLicense,
   getOrderById,
   getUserById,
+  getUserByEmail,
   updateBeat,
   updateOrder,
   listBeatFiles,
   bumpBeatStat,
   getDeliveryByOrder,
 } from "./repo";
+import { all } from "./db";
 import type { Beat, Delivery, License, Order, User } from "./types";
 import { sendMail } from "./mail";
 import { deliveryEmail, adminOrderEmail } from "./emails";
+import { notifyProducerOrder } from "./whatsapp";
 
 export interface DeliveryFile {
   label: string;
@@ -133,10 +136,21 @@ export async function buildDeliveryBundle(delivery: Delivery, ctx: { beat: Beat;
   return { zipPath, zipName, bytes: zip.byteLength };
 }
 
+async function getAdminUserId(): Promise<string | null> {
+  try {
+    const admin = await getUserByEmail(env.adminEmail);
+    if (admin) return admin.id;
+    const rows = await all<{ id: string }>("SELECT id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1");
+    return rows[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Called once a payment is confirmed (webhook, STK callback, bank approval or
  * demo checkout). Creates the delivery bundle, emails the files to the artist
- * and notifies the producer.
+ * and notifies the producer on website + WhatsApp.
  */
 export async function fulfillOrder(orderId: string, opts: { silent?: boolean } = {}) {
   const order = await getOrderById(orderId);
@@ -209,6 +223,39 @@ export async function fulfillOrder(orderId: string, opts: { silent?: boolean } =
       text: adminMail.text,
       orderId: order.id,
     });
+
+    // ── Producer inbox notification (website) + WhatsApp ──
+    try {
+      const adminId = await getAdminUserId();
+      await createMessage({
+        direction: "inbound",
+        kind: "order",
+        from_user_id: buyer.id,
+        to_user_id: adminId,
+        from_name: buyer.name,
+        from_email: buyer.email,
+        subject: `✅ Paid: ${beat.title} - ${license?.name ?? "Standard"} (${order.reference}) - ${moneyLabel(order.amount_cents, order.currency)}`,
+        body: `Payment confirmed!\n\nBeat: ${beat.title} (${beat.genre})\nLicence: ${license?.name ?? "Standard"}\nAmount: ${moneyLabel(order.amount_cents, order.currency)} via ${order.method}\nBuyer: ${buyer.name} <${buyer.email}>\nPhone: ${buyer.phone ?? "—"}\nReference: ${order.reference}\n\nDelivery: ${downloadUrl}\nAdmin: ${env.appUrl}/admin/orders?ref=${order.reference}\n\nFiles have been delivered to the buyer automatically.`,
+        order_id: order.id,
+        beat_id: beat.id,
+      });
+
+      await notifyProducerOrder({
+        reference: order.reference,
+        beatTitle: beat.title,
+        beatGenre: beat.genre,
+        licenseName: license?.name ?? "Standard",
+        amount: moneyLabel(order.amount_cents, order.currency),
+        currency: order.currency,
+        method: order.method,
+        buyerName: buyer.name,
+        buyerEmail: buyer.email,
+        buyerPhone: buyer.phone,
+        status: "paid",
+      }, "paid");
+    } catch (err) {
+      console.error("[fulfillment] producer notify failed (paid):", err);
+    }
   }
 
   return { order: { ...order, status: "delivered" as const }, delivery, bundle, files };

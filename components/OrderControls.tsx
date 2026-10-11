@@ -4,16 +4,24 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { approveOrderAction, rejectOrderAction, resendDeliveryAction, refundOrderAction } from "@/lib/actions/admin";
 import { useActionToast } from "./Toast";
-import { IconCheck, IconClose, IconDownload, IconMail } from "./icons";
+import { IconCheck, IconClose, IconDownload, IconMail, IconPhone } from "./icons";
 
 export default function OrderControls({
   reference,
   status,
   amount,
+  buyerName,
+  buyerEmail,
+  buyerPhone,
+  beatTitle,
 }: {
   reference: string;
   status: string;
   amount: string;
+  buyerName?: string;
+  buyerEmail?: string;
+  buyerPhone?: string | null;
+  beatTitle?: string;
 }) {
   const [approveState, approveAction, approving] = useActionState(approveOrderAction, undefined);
   const [rejectState, rejectAction, rejecting] = useActionState(rejectOrderAction, undefined);
@@ -28,12 +36,16 @@ export default function OrderControls({
 
   const paid = ["paid", "delivered"].includes(status);
 
+  const waDigits = (buyerPhone || "").replace(/[^0-9]/g, "");
+  const waMessage = `Hi ${buyerName || "there"}! Regarding your order ${reference} for "${beatTitle || "the beat"}" (${amount}) - ${status}. Let me know if you need anything. - 2211 BEATS`;
+  const waLink = waDigits ? `https://wa.me/${waDigits}?text=${encodeURIComponent(waMessage)}` : "";
+
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row row--wrap" style={{ gap: 7 }}>
         {!paid && (
           <button type="button" className="btn btn--primary btn--sm" onClick={() => setConfirm(confirm === "approve" ? "none" : "approve")}>
-            <IconCheck size={13} /> Mark paid &amp; deliver
+            <IconCheck size={13} /> Mark paid & deliver
           </button>
         )}
         {paid && (
@@ -57,6 +69,11 @@ export default function OrderControls({
         <Link href={`/order/${reference}`} className="btn btn--ghost btn--sm">
           <IconDownload size={13} /> View
         </Link>
+        {waLink && (
+          <a href={waLink} target="_blank" rel="noreferrer noopener" className="btn btn--outline btn--sm" title={`Chat with ${buyerName} on WhatsApp`}>
+            <IconPhone size={13} /> WhatsApp buyer
+          </a>
+        )}
       </div>
 
       {confirm !== "none" && (
@@ -70,7 +87,7 @@ export default function OrderControls({
           </strong>
           <p className="tiny muted" style={{ margin: 0, lineHeight: 1.6 }}>
             {confirm === "approve"
-              ? "The artist receives the delivery email with the beat files, licence certificate and a Vault entry."
+              ? "The artist receives the delivery email with the beat files, licence certificate and a Vault entry. Producer also gets website inbox + WhatsApp notification."
               : confirm === "reject"
                 ? "The artist is notified by email and in their Studio inbox, and can retry payment."
                 : "The order is marked refunded and the artist is notified. Process the actual refund in your Paystack/bank dashboard."}
