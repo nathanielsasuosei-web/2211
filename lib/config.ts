@@ -29,6 +29,34 @@ function list(name: string, fallback: string[]): string[] {
     .filter(Boolean);
 }
 
+function normalizeUrl(raw: string, fallback: string): string {
+  let url = raw.trim();
+  if (!url) url = fallback;
+  // If user pasted just a domain like "my-app.vercel.app" without protocol,
+  // prepend https:// so `new URL()` doesn't throw.
+  if (url && !/^https?:\/\//i.test(url)) {
+    url = `https://${url.replace(/^\/+/, "")}`;
+  }
+  return url.replace(/\/$/, "");
+}
+
+function resolveAppUrl(): string {
+  // Explicit APP_URL wins
+  const explicit = str("APP_URL", "");
+  if (explicit) return normalizeUrl(explicit, "http://localhost:3000");
+
+  // On Vercel, VERCEL_URL is like "my-app-xyz.vercel.app" (no protocol)
+  // VERCEL_PROJECT_PRODUCTION_URL may also be set
+  const vercelUrl = str("VERCEL_URL", "") || str("VERCEL_PROJECT_PRODUCTION_URL", "");
+  if (vercelUrl) return normalizeUrl(vercelUrl, "http://localhost:3000");
+
+  // Fallback to NEXT_PUBLIC_VERCEL_URL if set
+  const nextPublic = str("NEXT_PUBLIC_VERCEL_URL", "");
+  if (nextPublic) return normalizeUrl(nextPublic, "http://localhost:3000");
+
+  return "http://localhost:3000";
+}
+
 export const env = {
   nodeEnv: str("NODE_ENV", "development"),
   isProd: str("NODE_ENV", "development") === "production",
@@ -37,7 +65,7 @@ export const env = {
   appTagline: str("APP_TAGLINE", "Premium beats for serious artists"),
   /** Store-wide default accent colour (admin can override in Settings). */
   accentColor: str("ACCENT_COLOR", "#e10600"),
-  appUrl: str("APP_URL", "http://localhost:3000").replace(/\/$/, ""),
+  appUrl: resolveAppUrl(),
   appSecret: str("APP_SECRET", "dev-secret-please-change-me-in-production-2211"),
 
   databaseUrl: str("DATABASE_URL", ""),

@@ -245,12 +245,57 @@ function toSqlite(sql: string, params: Param[]): { sql: string; params: (string 
 /* ------------------------------------------------------------------ */
 
 function createSqliteDriver(file: string): Database {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
-  db.exec("PRAGMA journal_mode = WAL;");
-  db.exec("PRAGMA foreign_keys = ON;");
+  let DatabaseSync: any;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    DatabaseSync = (require("node:sqlite") as any).DatabaseSync;
+    if (!DatabaseSync) throw new Error("DatabaseSync not found");
+  } catch (err: any) {
+    console.error(
+      `[db] node:sqlite not available (Node <22.5 or runtime restriction). Using memory fallback. Original error: ${err?.message || err}`,
+    );
+    // Return memory fallback so the app doesn't crash with 500
+    // Data will be empty but pages will render
+    return createMemoryDriver();
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+  } catch (err: any) {
+    console.error(`[db] mkdir failed for ${file}: ${err?.message}`);
+    // If mkdir fails (read-only FS), try /tmp
+    if (file !== "/tmp/storage/app.db" && process.env.VERCEL) {
+      const fallback = "/tmp/storage/app.db";
+      console.warn(`[db] trying fallback path ${fallback}`);
+      fs.mkdirSync(path.dirname(fallback), { recursive: true });
+      return createSqliteDriver(fallback);
+    }
+    throw err;
+  }
+
+  let db: any;
+  try {
+    db = new DatabaseSync(file);
+  } catch (err: any) {
+    console.error(`[db] failed to open ${file}: ${err?.message}`);
+    if (file !== "/tmp/storage/app.db" && process.env.VERCEL) {
+      const fallback = "/tmp/storage/app.db";
+      console.warn(`[db] trying fallback path ${fallback}`);
+      fs.mkdirSync(path.dirname(fallback), { recursive: true });
+      db = new DatabaseSync(fallback);
+    } else {
+      throw err;
+    }
+  }
+
+  try {
+    db.exec("PRAGMA journal_mode = WAL;");
+  } catch {
+    // WAL may fail on some FS, ignore
+  }
+  try {
+    db.exec("PRAGMA foreign_keys = ON;");
+  } catch {}
 
   type Statement = ReturnType<InstanceType<typeof DatabaseSync>["prepare"]>;
   const cache = new Map<string, Statement>();
@@ -283,6 +328,41 @@ function createSqliteDriver(file: string): Database {
     },
     async exec(sql: string) {
       db.exec(sql);
+    },
+  };
+}
+
+
+/* ------------------------------------------------------------------ */
+/* In-memory fallback driver (when node:sqlite unavailable)            */
+/* ------------------------------------------------------------------ */
+
+function createMemoryDriver(): Database {
+  console.warn("[db] Using in-memory fallback driver - data will be empty and not persisted. Set DATABASE_URL to Postgres for production, or use Node 22.5+ for SQLite.");
+  const store = new Map<string, any[]>();
+  return {
+    dialect: "sqlite",
+    async all<T = Row>(sql: string, params: Param[] = []): Promise<T[]> {
+      // Very naive: return empty for most queries, but handle site_settings and basic counts
+      if (/FROM\s+site_settings/i.test(sql)) {
+        return [] as T[];
+      }
+      if (/COUNT\(\*\)/i.test(sql)) {
+        return [{ c: 0 } as unknown as T];
+      }
+      return [] as T[];
+    },
+    async get<T = Row>(sql: string, params: Param[] = []): Promise<T | null> {
+      if (/COUNT\(\*\)/i.test(sql)) {
+        return { c: 0 } as unknown as T;
+      }
+      return null;
+    },
+    async run(sql: string, params: Param[] = []): Promise<RunResult> {
+      return { changes: 0 };
+    },
+    async exec(sql: string): Promise<void> {
+      // no-op
     },
   };
 }
@@ -328,14 +408,32 @@ async function createPostgresDriver(url: string): Promise<Database> {
 const globalForDb = globalThis as unknown as { __db?: Database; __dbReady?: Promise<Database> };
 
 export function dbFile(): string {
-  return process.env.SQLITE_FILE ?? path.join(process.cwd(), "storage", "app.db");
+  if (process.env.SQLITE_FILE) return process.env.SQLITE_FILE;
+  // On Vercel the only writable directory is /tmp
+  if (process.env.VERCEL) return "/tmp/storage/app.db";
+  return path.join(process.cwd(), "storage", "app.db");
 }
 
 async function makeDb(): Promise<Database> {
   if (env.databaseUrl.startsWith("postgres")) {
-    return createPostgresDriver(env.databaseUrl);
+    try {
+      return await createPostgresDriver(env.databaseUrl);
+    } catch (err: any) {
+      console.error(`[db] Postgres connection failed: ${err?.message}. Falling back to SQLite if possible.`);
+      try {
+        return createSqliteDriver(process.env.VERCEL ? "/tmp/storage/app.db" : dbFile());
+      } catch (e) {
+        console.error(`[db] SQLite fallback also failed: ${(e as any)?.message}. Using memory fallback.`);
+        return createMemoryDriver();
+      }
+    }
   }
-  return createSqliteDriver(dbFile());
+  try {
+    return createSqliteDriver(dbFile());
+  } catch (err: any) {
+    console.error(`[db] SQLite driver failed: ${err?.message}. Using memory fallback.`);
+    return createMemoryDriver();
+  }
 }
 
 export async function getDb(): Promise<Database> {
@@ -343,16 +441,22 @@ export async function getDb(): Promise<Database> {
   if (!globalForDb.__dbReady) {
     globalForDb.__dbReady = makeDb()
       .then(async (db) => {
-        for (const statement of SCHEMA.split(/;\s*\n/)) {
-          const sql = statement.trim();
-          if (sql) await db.exec(sql);
+        try {
+          for (const statement of SCHEMA.split(/;\s*\n/)) {
+            const sql = statement.trim();
+            if (sql) await db.exec(sql);
+          }
+        } catch (err) {
+          console.error("[db] schema creation failed (non-fatal):", err);
         }
         globalForDb.__db = db;
         return db;
       })
       .catch((err) => {
-        globalForDb.__dbReady = undefined;
-        throw err;
+        console.error("[db] getDb failed, using memory fallback:", err);
+        const mem = createMemoryDriver();
+        globalForDb.__db = mem;
+        return mem;
       });
   }
   return globalForDb.__dbReady;

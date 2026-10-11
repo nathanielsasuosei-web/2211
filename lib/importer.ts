@@ -75,9 +75,10 @@ export type ImportPlan = {
 };
 
 export function importDir(): string {
+  const base = process.env.VERCEL ? "/tmp" : process.cwd();
   const custom = process.env.IMPORT_DIR?.trim();
-  if (custom) return path.isAbsolute(custom) ? custom : path.join(process.cwd(), custom);
-  return path.join(process.cwd(), "storage", "import");
+  if (custom) return path.isAbsolute(custom) ? custom : path.join(base, custom);
+  return path.join(base, "storage", "import");
 }
 
 /* ------------------------------------------------------------------ */

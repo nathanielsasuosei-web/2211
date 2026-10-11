@@ -533,8 +533,9 @@ export async function resetDemoData() {
       await fsp.rm(path.join(root, "artwork"), { recursive: true, force: true });
       await fsp.rm(path.join(root, "videos"), { recursive: true, force: true });
     }
-    await fsp.rm(path.join(process.cwd(), "storage", "deliveries"), { recursive: true, force: true });
-    await fsp.rm(path.join(process.cwd(), "storage", "outbox"), { recursive: true, force: true });
+    const { DELIVERY_ROOT, OUTBOX_ROOT } = await import("./storage");
+    await fsp.rm(DELIVERY_ROOT, { recursive: true, force: true });
+    await fsp.rm(OUTBOX_ROOT, { recursive: true, force: true });
   } catch {
     /* ignore */
   }

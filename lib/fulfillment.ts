@@ -94,7 +94,8 @@ export function licenseCertificate(opts: {
 
 /** Build (and cache) the ZIP a buyer downloads / receives by email. */
 export async function buildDeliveryBundle(delivery: Delivery, ctx: { beat: Beat; license: License | null; order: Order; buyer: User }) {
-  const dir = path.join(process.cwd(), "storage", "deliveries", delivery.token);
+  const { DELIVERY_ROOT } = await import("./storage");
+  const dir = path.join(DELIVERY_ROOT, delivery.token);
   ensureDir(dir);
   const zipName = `${ctx.beat.slug}-${(ctx.license?.name ?? "licence").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.zip`;
   const zipPath = path.join(dir, zipName);

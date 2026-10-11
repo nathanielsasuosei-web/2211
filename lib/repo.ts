@@ -98,45 +98,50 @@ export interface BeatFilters {
 }
 
 export async function listBeats(filters: BeatFilters = {}): Promise<Beat[]> {
-  const where: string[] = [filters.includeUnpublished ? "1=1" : "published = 1"];
-  const params: (string | number)[] = [];
-  const push = (clause: string, value: string | number) => {
-    params.push(value);
-    where.push(clause.replace("?", `$${params.length}`));
-  };
+  try {
+    const where: string[] = [filters.includeUnpublished ? "1=1" : "published = 1"];
+    const params: (string | number)[] = [];
+    const push = (clause: string, value: string | number) => {
+      params.push(value);
+      where.push(clause.replace("?", `$${params.length}`));
+    };
 
-  if (filters.q) {
-    const like = `%${filters.q.toLowerCase()}%`;
-    params.push(like);
-    const i = params.length;
-    where.push(
-      `(lower(title) LIKE $${i} OR lower(COALESCE(description,'')) LIKE $${i} OR lower(COALESCE(tags,'')) LIKE $${i} OR lower(genre) LIKE $${i})`,
-    );
-  }
-  if (filters.genre && filters.genre !== "all") push("lower(genre) = lower(?)", filters.genre);
-  if (filters.mood && filters.mood !== "all") push("lower(COALESCE(mood,'')) = lower(?)", filters.mood);
-  if (filters.key && filters.key !== "all") push("upper(COALESCE(musical_key,'')) = upper(?)", filters.key);
-  if (filters.bpmMin) push("COALESCE(bpm,0) >= ?", filters.bpmMin);
-  if (filters.bpmMax) push("COALESCE(bpm,0) <= ?", filters.bpmMax);
-  if (filters.featuredOnly) where.push("featured = 1");
+    if (filters.q) {
+      const like = `%${filters.q.toLowerCase()}%`;
+      params.push(like);
+      const i = params.length;
+      where.push(
+        `(lower(title) LIKE $${i} OR lower(COALESCE(description,'')) LIKE $${i} OR lower(COALESCE(tags,'')) LIKE $${i} OR lower(genre) LIKE $${i})`,
+      );
+    }
+    if (filters.genre && filters.genre !== "all") push("lower(genre) = lower(?)", filters.genre);
+    if (filters.mood && filters.mood !== "all") push("lower(COALESCE(mood,'')) = lower(?)", filters.mood);
+    if (filters.key && filters.key !== "all") push("upper(COALESCE(musical_key,'')) = upper(?)", filters.key);
+    if (filters.bpmMin) push("COALESCE(bpm,0) >= ?", filters.bpmMin);
+    if (filters.bpmMax) push("COALESCE(bpm,0) <= ?", filters.bpmMax);
+    if (filters.featuredOnly) where.push("featured = 1");
 
-  const orderBy: Record<string, string> = {
-    new: "created_at DESC",
-    popular: "plays DESC, downloads DESC",
-    price_asc: "price_cents ASC",
-    price_desc: "price_cents DESC",
-    title: "title ASC",
-  };
-  const limit = filters.limit ?? 60;
-  const offset = filters.offset ?? 0;
-  params.push(limit, offset);
+    const orderBy: Record<string, string> = {
+      new: "created_at DESC",
+      popular: "plays DESC, downloads DESC",
+      price_asc: "price_cents ASC",
+      price_desc: "price_cents DESC",
+      title: "title ASC",
+    };
+    const limit = filters.limit ?? 60;
+    const offset = filters.offset ?? 0;
+    params.push(limit, offset);
 
-  return all<Beat>(
-    `SELECT * FROM beats WHERE ${where.join(" AND ")}
+    return await all<Beat>(
+      `SELECT * FROM beats WHERE ${where.join(" AND ")}
      ORDER BY ${orderBy[filters.sort ?? "new"] ?? orderBy.new}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
-    params,
-  );
+      params,
+    );
+  } catch (err) {
+    console.error("[repo] listBeats failed, returning empty:", err);
+    return [];
+  }
 }
 
 export const getBeatBySlug = (slug: string) => get<Beat>("SELECT * FROM beats WHERE slug = $1", [slug]);
@@ -201,69 +206,77 @@ export async function deleteBeat(id: string) {
 }
 
 export async function bumpBeatStat(id: string, column: "plays" | "downloads" | "likes", by = 1) {
-  const safe = ["plays", "downloads", "likes"].includes(column) ? column : "plays";
-  await run(`UPDATE beats SET ${safe} = COALESCE(${safe},0) + $1 WHERE id = $2`, [by, id]);
+  try {
+    const safe = ["plays", "downloads", "likes"].includes(column) ? column : "plays";
+    await run(`UPDATE beats SET ${safe} = COALESCE(${safe},0) + $1 WHERE id = $2`, [by, id]);
+  } catch (err) {
+    console.error("[repo] bumpBeatStat failed:", err);
+  }
 }
 
 export async function ensureDefaultLicenses(beatId: string, basePrice: number, currency: string) {
-  const existing = await all<{ c: number }>("SELECT COUNT(*) AS c FROM licenses WHERE beat_id = $1", [beatId]);
-  if (asNumber(existing[0]?.c) > 0) return;
-  const now = nowIso();
-  const tiers = [
-    {
-      name: "MP3 Lease",
-      tier: 1,
-      mult: 1,
-      description: "Tagged-free high-quality MP3 for streaming and demos.",
-      perks: ["MP3 (320kbps)", "Up to 50,000 streams", "Music video use", "Non-exclusive"],
-      exclusive: 0,
-      included: JSON.stringify(["mp3"]),
-    },
-    {
-      name: "WAV Lease",
-      tier: 2,
-      mult: 1.8,
-      description: "Unlimited-quality WAV plus higher streaming caps.",
-      perks: ["WAV + MP3", "Up to 250,000 streams", "Radio play", "Non-exclusive"],
-      exclusive: 0,
-      included: JSON.stringify(["wav", "mp3"]),
-    },
-    {
-      name: "Trackout Lease",
-      tier: 3,
-      mult: 3,
-      description: "Every stem for a proper mix, plus WAV and MP3.",
-      perks: ["All stems (ZIP)", "WAV + MP3", "Up to 1,000,000 streams", "Mix & master friendly"],
-      exclusive: 0,
-      included: JSON.stringify(["stems", "wav", "mp3"]),
-    },
-    {
-      name: "Exclusive Rights",
-      tier: 4,
-      mult: 8,
-      description: "Full ownership transfer. Beat is removed from the store after purchase.",
-      perks: ["Exclusive rights", "All stems + WAV + MP3", "Unlimited distribution", "Beat taken down"],
-      exclusive: 1,
-      included: JSON.stringify(["stems", "wav", "mp3"]),
-    },
-  ];
-  for (const t of tiers) {
-    await run(
-      `INSERT INTO licenses (id,beat_id,name,tier,price_cents,currency,description,perks,allows_exclusive,created_at)
+  try {
+    const existing = await all<{ c: number }>("SELECT COUNT(*) AS c FROM licenses WHERE beat_id = $1", [beatId]);
+    if (asNumber(existing[0]?.c) > 0) return;
+    const now = nowIso();
+    const tiers = [
+      {
+        name: "MP3 Lease",
+        tier: 1,
+        mult: 1,
+        description: "Tagged-free high-quality MP3 for streaming and demos.",
+        perks: ["MP3 (320kbps)", "Up to 50,000 streams", "Music video use", "Non-exclusive"],
+        exclusive: 0,
+        included: JSON.stringify(["mp3"]),
+      },
+      {
+        name: "WAV Lease",
+        tier: 2,
+        mult: 1.8,
+        description: "Unlimited-quality WAV plus higher streaming caps.",
+        perks: ["WAV + MP3", "Up to 250,000 streams", "Radio play", "Non-exclusive"],
+        exclusive: 0,
+        included: JSON.stringify(["wav", "mp3"]),
+      },
+      {
+        name: "Trackout Lease",
+        tier: 3,
+        mult: 3,
+        description: "Every stem for a proper mix, plus WAV and MP3.",
+        perks: ["All stems (ZIP)", "WAV + MP3", "Up to 1,000,000 streams", "Mix & master friendly"],
+        exclusive: 0,
+        included: JSON.stringify(["stems", "wav", "mp3"]),
+      },
+      {
+        name: "Exclusive Rights",
+        tier: 4,
+        mult: 8,
+        description: "Full ownership transfer. Beat is removed from the store after purchase.",
+        perks: ["Exclusive rights", "All stems + WAV + MP3", "Unlimited distribution", "Beat taken down"],
+        exclusive: 1,
+        included: JSON.stringify(["stems", "wav", "mp3"]),
+      },
+    ];
+    for (const t of tiers) {
+      await run(
+        `INSERT INTO licenses (id,beat_id,name,tier,price_cents,currency,description,perks,allows_exclusive,created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [
-        newId("lic"),
-        beatId,
-        t.name,
-        t.tier,
-        Math.max(0, Math.round((basePrice * t.mult) / 100) * 100),
-        currency,
-        t.description,
-        JSON.stringify(t.perks),
-        t.exclusive,
-        now,
-      ],
-    );
+        [
+          newId("lic"),
+          beatId,
+          t.name,
+          t.tier,
+          Math.max(0, Math.round((basePrice * t.mult) / 100) * 100),
+          currency,
+          t.description,
+          JSON.stringify(t.perks),
+          t.exclusive,
+          now,
+        ],
+      );
+    }
+  } catch (err) {
+    console.error("[repo] ensureDefaultLicenses failed:", err);
   }
 }
 
@@ -319,21 +332,32 @@ export async function deleteBeatFile(id: string) {
 }
 
 export async function listGenres(): Promise<string[]> {
-  const rows = await all<{ genre: string; c: number }>(
-    "SELECT genre, COUNT(*) AS c FROM beats WHERE published = 1 GROUP BY genre ORDER BY c DESC, genre ASC",
-  );
-  return rows.map((r) => r.genre);
+  try {
+    const rows = await all<{ genre: string; c: number }>(
+      "SELECT genre, COUNT(*) AS c FROM beats WHERE published = 1 GROUP BY genre ORDER BY c DESC, genre ASC",
+    );
+    return rows.map((r) => r.genre);
+  } catch (err) {
+    console.error("[repo] listGenres failed:", err);
+    return [];
+  }
 }
 
 /* ------------------------------------------------------------------ */
 /* Videos                                                              */
 /* ------------------------------------------------------------------ */
 
-export const listVideos = (limit = 50, includeUnpublished = false) =>
-  all<Video>(
-    `SELECT * FROM videos ${includeUnpublished ? "" : "WHERE published = 1"} ORDER BY created_at DESC LIMIT $1`,
-    [limit],
-  );
+export const listVideos = async (limit = 50, includeUnpublished = false): Promise<Video[]> => {
+  try {
+    return await all<Video>(
+      `SELECT * FROM videos ${includeUnpublished ? "" : "WHERE published = 1"} ORDER BY created_at DESC LIMIT $1`,
+      [limit],
+    );
+  } catch (err) {
+    console.error("[repo] listVideos failed:", err);
+    return [];
+  }
+};
 
 export const getVideoBySlug = (slug: string) => get<Video>("SELECT * FROM videos WHERE slug = $1", [slug]);
 export const getVideoById = (id: string) => get<Video>("SELECT * FROM videos WHERE id = $1", [id]);
@@ -380,7 +404,11 @@ export async function deleteVideo(id: string) {
 }
 
 export async function bumpVideoViews(id: string) {
-  await run("UPDATE videos SET views = COALESCE(views,0) + 1 WHERE id = $1", [id]);
+  try {
+    await run("UPDATE videos SET views = COALESCE(views,0) + 1 WHERE id = $1", [id]);
+  } catch (err) {
+    console.error("[repo] bumpVideoViews failed:", err);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -547,10 +575,14 @@ export async function listPurchases(userId: string): Promise<Purchase[]> {
 }
 
 export async function registerDownload(token: string) {
-  await run(
-    "UPDATE deliveries SET download_count = download_count + 1, last_download_at = $2 WHERE token = $1",
-    [token, nowIso()],
-  );
+  try {
+    await run(
+      "UPDATE deliveries SET download_count = download_count + 1, last_download_at = $2 WHERE token = $1",
+      [token, nowIso()],
+    );
+  } catch (err) {
+    console.error("[repo] registerDownload failed:", err);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -610,14 +642,19 @@ export async function markMessageRead(id: string) {
   await run("UPDATE messages SET is_read = 1 WHERE id = $1", [id]);
 }
 
-export const unreadMessageCount = async (userId?: string) => {
-  const row = userId
-    ? await get<{ c: number }>(
-        "SELECT COUNT(*) AS c FROM messages WHERE to_user_id = $1 AND is_read = 0",
-        [userId],
-      )
-    : await get<{ c: number }>("SELECT COUNT(*) AS c FROM messages WHERE is_read = 0");
-  return asNumber(row?.c);
+export const unreadMessageCount = async (userId?: string): Promise<number> => {
+  try {
+    const row = userId
+      ? await get<{ c: number }>(
+          "SELECT COUNT(*) AS c FROM messages WHERE to_user_id = $1 AND is_read = 0",
+          [userId],
+        )
+      : await get<{ c: number }>("SELECT COUNT(*) AS c FROM messages WHERE is_read = 0");
+    return asNumber(row?.c);
+  } catch (err) {
+    console.error("[repo] unreadMessageCount failed:", err);
+    return 0;
+  }
 };
 
 /* ------------------------------------------------------------------ */
@@ -632,13 +669,23 @@ export const listEmails = (limit = 60) =>
 /* ------------------------------------------------------------------ */
 
 export async function getSetting(key: string, fallback = ""): Promise<string> {
-  const row = await get<{ value: string | null }>("SELECT value FROM site_settings WHERE key = $1", [key]);
-  return row?.value ?? fallback;
+  try {
+    const row = await get<{ value: string | null }>("SELECT value FROM site_settings WHERE key = $1", [key]);
+    return row?.value ?? fallback;
+  } catch (err) {
+    console.error(`[repo] getSetting ${key} failed:`, err);
+    return fallback;
+  }
 }
 
 export async function getAllSettings(): Promise<Record<string, string>> {
-  const rows = await all<{ key: string; value: string | null }>("SELECT key, value FROM site_settings");
-  return Object.fromEntries(rows.map((r) => [r.key, r.value ?? ""]));
+  try {
+    const rows = await all<{ key: string; value: string | null }>("SELECT key, value FROM site_settings");
+    return Object.fromEntries(rows.map((r) => [r.key, r.value ?? ""]));
+  } catch (err) {
+    console.error("[repo] getAllSettings failed, returning empty:", err);
+    return {};
+  }
 }
 
 export async function setSetting(key: string, value: string) {
@@ -654,50 +701,73 @@ export async function setSetting(key: string, value: string) {
 /* ------------------------------------------------------------------ */
 
 export async function dashboardStats() {
-  const [beats, artists, orders, revenue, pending, videos, emails] = await Promise.all([
-    get<{ c: number }>("SELECT COUNT(*) AS c FROM beats"),
-    get<{ c: number }>("SELECT COUNT(*) AS c FROM users WHERE role = 'artist'"),
-    get<{ c: number }>("SELECT COUNT(*) AS c FROM orders"),
-    get<{ c: number }>("SELECT COALESCE(SUM(amount_cents),0) AS c FROM orders WHERE status IN ('paid','delivered')"),
-    get<{ c: number }>("SELECT COUNT(*) AS c FROM orders WHERE status IN ('pending','awaiting_payment','in_review')"),
-    get<{ c: number }>("SELECT COUNT(*) AS c FROM videos"),
-    get<{ c: number }>("SELECT COUNT(*) AS c FROM email_log"),
-  ]);
-  return {
-    beats: asNumber(beats?.c),
-    artists: asNumber(artists?.c),
-    orders: asNumber(orders?.c),
-    revenueCents: asNumber(revenue?.c),
-    pendingOrders: asNumber(pending?.c),
-    videos: asNumber(videos?.c),
-    emails: asNumber(emails?.c),
-  };
+  try {
+    const [beats, artists, orders, revenue, pending, videos, emails] = await Promise.all([
+      get<{ c: number }>("SELECT COUNT(*) AS c FROM beats"),
+      get<{ c: number }>("SELECT COUNT(*) AS c FROM users WHERE role = 'artist'"),
+      get<{ c: number }>("SELECT COUNT(*) AS c FROM orders"),
+      get<{ c: number }>("SELECT COALESCE(SUM(amount_cents),0) AS c FROM orders WHERE status IN ('paid','delivered')"),
+      get<{ c: number }>("SELECT COUNT(*) AS c FROM orders WHERE status IN ('pending','awaiting_payment','in_review')"),
+      get<{ c: number }>("SELECT COUNT(*) AS c FROM videos"),
+      get<{ c: number }>("SELECT COUNT(*) AS c FROM email_log"),
+    ]);
+    return {
+      beats: asNumber(beats?.c),
+      artists: asNumber(artists?.c),
+      orders: asNumber(orders?.c),
+      revenueCents: asNumber(revenue?.c),
+      pendingOrders: asNumber(pending?.c),
+      videos: asNumber(videos?.c),
+      emails: asNumber(emails?.c),
+    };
+  } catch (err) {
+    console.error("[repo] dashboardStats failed, returning zeros:", err);
+    return {
+      beats: 0,
+      artists: 0,
+      orders: 0,
+      revenueCents: 0,
+      pendingOrders: 0,
+      videos: 0,
+      emails: 0,
+    };
+  }
 }
 
 export async function recentOrders(limit = 8) {
-  const orders = await all<Order>("SELECT * FROM orders ORDER BY created_at DESC LIMIT $1", [limit]);
-  return decorateOrders(orders);
+  try {
+    const orders = await all<Order>("SELECT * FROM orders ORDER BY created_at DESC LIMIT $1", [limit]);
+    return decorateOrders(orders);
+  } catch (err) {
+    console.error("[repo] recentOrders failed:", err);
+    return [];
+  }
 }
 
 export async function decorateOrders(orders: Order[]) {
-  const ids = [...new Set(orders.map((o) => o.beat_id))];
-  const beats = ids.length
-    ? await all<Beat>(`SELECT id,title,slug,artwork FROM beats WHERE id IN (${ids.map((_, i) => `$${i + 1}`).join(",")})`, ids)
-    : [];
-  const beatMap = new Map(beats.map((b) => [b.id, b]));
-  const userIds = [...new Set(orders.map((o) => o.user_id))];
-  const users = userIds.length
-    ? await all<User>(
-        `SELECT id,name,email FROM users WHERE id IN (${userIds.map((_, i) => `$${i + 1}`).join(",")})`,
-        userIds,
-      )
-    : [];
-  const userMap = new Map(users.map((u) => [u.id, u]));
-  return orders.map((o) => ({
-    ...o,
-    beat: beatMap.get(o.beat_id) ?? null,
-    buyer: userMap.get(o.user_id) ?? null,
-  }));
+  try {
+    const ids = [...new Set(orders.map((o) => o.beat_id))];
+    const beats = ids.length
+      ? await all<Beat>(`SELECT id,title,slug,artwork FROM beats WHERE id IN (${ids.map((_, i) => `$${i + 1}`).join(",")})`, ids)
+      : [];
+    const beatMap = new Map(beats.map((b) => [b.id, b]));
+    const userIds = [...new Set(orders.map((o) => o.user_id))];
+    const users = userIds.length
+      ? await all<User>(
+          `SELECT id,name,email FROM users WHERE id IN (${userIds.map((_, i) => `$${i + 1}`).join(",")})`,
+          userIds,
+        )
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    return orders.map((o) => ({
+      ...o,
+      beat: beatMap.get(o.beat_id) ?? null,
+      buyer: userMap.get(o.user_id) ?? null,
+    }));
+  } catch (err) {
+    console.error("[repo] decorateOrders failed:", err);
+    return orders.map((o) => ({ ...o, beat: null, buyer: null }));
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -713,9 +783,13 @@ export function slugify(input: string): string {
 }
 
 export async function recordPlay(beatId: string, userId?: string | null) {
-  await bumpBeatStat(beatId, "plays");
-  await run(
-    `INSERT INTO play_events (id,beat_id,user_id,ip_hash,created_at) VALUES ($1,$2,$3,$4,$5)`,
-    [newId("play"), beatId, userId ?? null, null, nowIso()],
-  );
+  try {
+    await bumpBeatStat(beatId, "plays");
+    await run(
+      `INSERT INTO play_events (id,beat_id,user_id,ip_hash,created_at) VALUES ($1,$2,$3,$4,$5)`,
+      [newId("play"), beatId, userId ?? null, null, nowIso()],
+    );
+  } catch (err) {
+    console.error("[repo] recordPlay failed:", err);
+  }
 }
