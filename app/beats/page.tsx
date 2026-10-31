@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ensureBootstrapped } from "@/lib/bootstrap";
 import { getSession } from "@/lib/auth";
-import { getSetting, listBeats, listGenres, listPurchases } from "@/lib/repo";
+import { listBeats, listGenres, listPurchases } from "@/lib/repo";
 import { toTrack } from "@/lib/view";
 import BeatCard from "@/components/BeatCard";
 import BeatRow, { BeatRowHead } from "@/components/BeatRow";
@@ -46,11 +46,10 @@ export default async function BeatsPage({ searchParams }: { searchParams: Promis
   const filters = toFilters(params);
   const view = one(params, "view") === "list" ? "list" : "grid";
 
-  const [beats, genres, session, brand] = await Promise.all([
+  const [beats, genres, session] = await Promise.all([
     listBeats(filters),
     listGenres(),
     getSession(),
-    getSetting("brand_name", "2211 BEATS"),
   ]);
   const purchases = session ? await listPurchases(session.id) : [];
   const ownedIds = new Set(purchases.map((p) => p.beat_id));
@@ -59,16 +58,7 @@ export default async function BeatsPage({ searchParams }: { searchParams: Promis
   return (
     <div className="section section--tight">
       <div className="wrap stack" style={{ gap: 24 }}>
-        <header className="stack" style={{ gap: 12 }}>
-          <span className="eyebrow">The catalogue</span>
-          <h1 className="display h-lg">
-            Beat <span className="red">store</span>
-          </h1>
-          <p className="lede">
-            Instrumentals from the {brand} catalogue — all mixed, mastered and cleared for release. Preview free,
-            licence instantly, files delivered by email within seconds of payment.
-          </p>
-        </header>
+        <h1 className="sr-only">Beat store</h1>
 
         <Suspense fallback={<div className="skeleton" style={{ height: 92 }} />}>
           <FilterBar count={beats.length} />

@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import HeroCanvas from "./HeroCanvas";
-import { IconBolt, IconPlay, IconShield, IconUpload } from "./icons";
-import type { PublicSettings } from "@/lib/site-data";
+import { IconBolt, IconPlay } from "./icons";
 
 type Stat = { value: number; suffix?: string; label: string };
 
@@ -44,15 +43,7 @@ function StatBlock({ stat }: { stat: Stat }) {
   );
 }
 
-export default function Hero({
-  settings,
-  stats,
-  genres,
-}: {
-  settings: PublicSettings;
-  stats: { beats: number; artists: number; plays: number; delivered: number };
-  genres: string[];
-}) {
+export default function Hero({ stats }: { stats: { beats: number; artists: number; plays: number } }) {
   const [pointer, setPointer] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -72,6 +63,7 @@ export default function Hero({
 
   return (
     <section className="hero" ref={ref}>
+      <h1 className="sr-only">Beat store</h1>
       <HeroCanvas className="hero__canvas" idle={0.32} />
       <div className="hero__veil" />
       <div className="hero__grain" />
@@ -81,34 +73,10 @@ export default function Hero({
           className="stack"
           style={{ gap: 26, maxWidth: 900, transform: `translate3d(${pointer.x * -14}px, ${pointer.y * -10}px, 0)` }}
         >
-          <span className="eyebrow fade-up" style={{ animationDelay: "0.05s" }}>
-            {settings.heroEyebrow}
-          </span>
-
-          <h1 className="display h-xl hero__title">
-            <span className="line">
-              <span>{settings.heroLine1}</span>
-            </span>
-            <span className="line">
-              <span className="hero__red hero__shine">{settings.heroLine2}</span>
-            </span>
-            <span className="line">
-              <span className="hero__outline">{settings.heroLine3}</span>
-            </span>
-          </h1>
-
-          <p className="lede fade-up" style={{ animationDelay: "0.42s", maxWidth: "60ch" }}>
-            {settings.heroSub}
-          </p>
-
-          <div className="row row--wrap fade-up" style={{ gap: 12, animationDelay: "0.52s" }}>
+          <div className="row row--wrap fade-up" style={{ gap: 12, animationDelay: "0.05s" }}>
             <Link href="/beats" className="btn btn--primary btn--lg">
               <IconBolt size={17} />
               Browse the beat store
-            </Link>
-            <Link href="/signup" className="btn btn--outline btn--lg">
-              <IconUpload size={16} />
-              Create artist account
             </Link>
             <Link href="/watch" className="btn btn--ghost btn--lg">
               <IconPlay size={15} />
@@ -116,31 +84,11 @@ export default function Hero({
             </Link>
           </div>
 
-          <div className="hero__stats fade-up" style={{ animationDelay: "0.62s", maxWidth: 760 }}>
+          <div className="hero__stats fade-up" style={{ animationDelay: "0.15s", maxWidth: 760 }}>
             <StatBlock stat={{ value: stats.beats, label: "Beats in the store" }} />
             <StatBlock stat={{ value: stats.artists, label: "Artists licensed" }} />
             <StatBlock stat={{ value: stats.plays, suffix: "+", label: "Previews played" }} />
-            <StatBlock stat={{ value: stats.delivered, label: "Files delivered" }} />
           </div>
-
-          <div className="row row--wrap fade-up" style={{ gap: 8, animationDelay: "0.72s" }}>
-            <span className="chip chip--ok">
-              <IconShield size={13} /> Instant email delivery
-            </span>
-            <span className="chip">MTN MoMo · M-Pesa · Card · Bank</span>
-            <span className="chip">Unlimited re-downloads in your Vault</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="ticker" aria-hidden="true">
-        <div className="ticker__track">
-          {[0, 1].map((dup) => (
-            <span key={dup}>
-              {(genres.length ? genres : ["Afrobeats", "Amapiano", "Drill", "R&B", "Gospel", "Highlife"]).join(" · ")} ·
-              Licensed worldwide · Stems available · Instant delivery ·{" "}
-            </span>
-          ))}
         </div>
       </div>
     </section>

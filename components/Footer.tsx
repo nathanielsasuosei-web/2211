@@ -75,9 +75,6 @@ export default function Footer({ settings }: { settings: SiteSettings }) {
             <h5>Account</h5>
             <ul>
               <li>
-                <Link href="/signup">Create artist account</Link>
-              </li>
-              <li>
                 <Link href="/login">Sign in</Link>
               </li>
               <li>
