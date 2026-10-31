@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ensureBootstrapped } from "@/lib/bootstrap";
 import { getSiteSettings } from "@/lib/site";
-import { dashboardStats, listBeats, listGenres } from "@/lib/repo";
+import { listGenres } from "@/lib/repo";
 import { IconBolt, IconCheck, IconMail, IconMusic, IconShield } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
@@ -9,30 +9,12 @@ export const metadata = { title: "Producer" };
 
 export default async function AboutPage() {
   await ensureBootstrapped();
-  const [settings, stats, beats, genres] = await Promise.all([
-    getSiteSettings(),
-    dashboardStats(),
-    listBeats({ sort: "popular", limit: 6 }),
-    listGenres(),
-  ]);
+  const [settings, genres] = await Promise.all([getSiteSettings(), listGenres()]);
 
   return (
     <div className="section section--tight">
       <div className="wrap stack" style={{ gap: 34 }}>
-        <header className="stack" style={{ gap: 14, maxWidth: "74ch" }}>
-          <span className="eyebrow">The producer</span>
-          <h1 className="display h-lg">
-            Sound built for <span className="red">artists who release</span>
-          </h1>
-          <p className="lede">{settings.producerBio}</p>
-        </header>
-
-        <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-          <div className="stat"><b>{stats.beats}</b><span>Beats in catalogue</span></div>
-          <div className="stat"><b>{stats.artists}</b><span>Artists served</span></div>
-          <div className="stat"><b>{genres.length}</b><span>Genres covered</span></div>
-          <div className="stat"><b>{stats.orders}</b><span>Licences delivered</span></div>
-        </div>
+        <h1 className="sr-only">Producer</h1>
 
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 22 }}>
           <div className="panel panel--flat pad-lg stack" style={{ gap: 14 }}>
@@ -70,19 +52,6 @@ export default async function AboutPage() {
             </div>
           </div>
         </div>
-
-        {beats.length > 0 && (
-          <section className="stack" style={{ gap: 16 }}>
-            <h2 className="display h-md">Most played this month</h2>
-            <div className="row row--wrap" style={{ gap: 10 }}>
-              {beats.map((b) => (
-                <Link key={b.id} href={`/beats/${b.slug}`} className="chip chip--red">
-                  {b.title} · {b.plays} plays
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
       </div>
     </div>
   );
