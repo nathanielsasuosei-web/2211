@@ -12,3 +12,4 @@ storage/
 public/uploads/
 npm-debug.log*
 .DS_Store
+.neon
